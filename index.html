@@ -1,0 +1,226 @@
+﻿<!DOCTYPE html>
+<html>
+
+<head>
+	<title>san2 styled map</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+html, body {
+    height: 100%;
+    margin: 0;
+    padding: 0;
+}
+
+/*
+.container, .container > div, .container > div #map-canvas {
+	position: relative;
+    height: inherit;
+    width: inherit;
+}
+*/
+#map-canvas {
+    height: 100%;
+    width: 100%;
+}
+
+img.lat {
+	zoom: 5;
+	image-rendering: pixelated;
+}
+
+#css_table {
+      display: table;
+	  height: 100%;
+	  width: 100%;
+  }
+.css_tr {
+      display: table-row;
+  }
+.css_td {
+      display: table-cell;
+	  width: 50%;
+	  background-color: antiquewhite;
+  }
+
+</style>
+<script>
+function round(value, decimals) { 
+  switch(decimals){
+    case 'xy': decimals = 2; break;
+    case 'll': decimals = 6; break;
+    case undefined : decimals = 0; break;
+    default: decimals = parseInt(decimals);
+  }
+  if(!decimals) decimals = 8;
+  return Number(Math.round(value+'e'+decimals)+'e-'+decimals);
+}
+
+function getLatlng(lat,lng){
+var latlng = new google.maps.LatLng(lat,lng);
+return latlng;
+}
+
+function drawLine(latlngs,map,polylines,option){
+
+	var polyline = new google.maps.Polyline({
+        path: latlngs
+      });
+	var optionNow = {
+      strokeColor: "#00FF00",
+      strokeOpacity: 0.8,
+      strokeWeight: 2
+    };
+	if(option) optionNow = option;
+    polyline.setOptions( optionNow);
+	polyline.setMap(map);
+	polylines.push(polyline)
+	
+}
+
+function getEventMarkerInfo (e,map,polylines){
+
+      var lat = e.latLng.lat() ; 
+      var lng = e.latLng.lng() ;
+	  var max = 1;
+	  var per = .1;
+	  var j = parseInt(max/per);
+	var lat0 = round(lat,1);
+	var lng0 = round(lng,1);
+	lat0 = parseInt(lat);
+	lng0 = parseInt(lng);
+	
+	// mod 2 for even or odd
+	if(lng0%2!=0) lat0+=max/2;
+	console.log(lat0,lng0);
+	
+	var latlng00 = getLatlng(lat0,lng0);
+	var latlng01 = getLatlng(lat0,lng0+max);
+	var latlng11 = getLatlng(lat0+max,lng0+max);
+ 	var latlng10 = getLatlng(lat0+max,lng0);
+	var box = [latlng00,latlng01,latlng11,latlng10,latlng00];
+	var lat=lat0,lats = [lat0];
+	var lng=lng0,lngs = [lng0];
+	for(var i = 1; i<j;i++){
+		lat+=per,lng+=per;
+		
+		lats.push(round(lat,2));
+		lngs.push(round(lng,2));
+	}
+	// clear first
+	if(polylines.length > 0){
+		for(var i = 0; i<polylines.length;i++) polylines[i].setMap(null);
+		polylines.length = 0;
+	}
+	// draw outer box
+	drawLine(box,map,polylines);
+	// draw line 0 half
+	var yellow = {
+			strokeColor: "#FFFF00",
+			strokeOpacity: 1,//.5,
+			strokeWeight: 1
+		};
+	var latlng0h0 = getLatlng(lat0+per/2,lng0);
+	var latlng0h1 = getLatlng(lat0+per/2,lng0+max);
+	var latlng00h = getLatlng(lat0,lng0+per/2);
+	var latlng01h = getLatlng(lat0+max,lng0+per/2);
+	//drawLine([latlng0h0,latlng0h1],map,polylines,yellow);
+	//drawLine([latlng00h,latlng01h],map,polylines,yellow);
+	
+	// draw line from lats
+	for(var i=0; i<lats.length;i++){
+		for(var j=0; j<lngs.length;j++){
+			var latA = lats[i];
+			var lngA = lngs[j];
+			if(j%2!=0){
+				latA = lats[i] - per/2;
+				//lngA = lngs[j];
+			} 
+			var latlng0 = getLatlng(latA,lngA)
+			var latlng1 = getLatlng(latA,lngA+per);
+			drawLine([latlng0,latlng1],map,polylines,yellow);
+		}
+		// half 
+		var latlng0h = getLatlng(lats[i]+per/2,lng0)
+		var latlng1h = getLatlng(lats[i]+per/2,lng0+max);
+		//drawLine([latlng0h,latlng1h],map,polylines,yellow);
+	}	
+	// draw line from lngs
+	for(var i=0; i<lngs.length;i++){
+		var latA = lat0;
+		if(i%2!=0) latA = lat0 - per / 2 ;
+		var latlng0 = getLatlng(latA,lngs[i])
+		var latlng1 = getLatlng(latA+max,lngs[i]);
+		drawLine([latlng0,latlng1],map,polylines,yellow);
+		// half
+		var latlng0h = getLatlng(lat0,lngs[i]+per/2)
+		var latlng1h = getLatlng(lat0+max,lngs[i]+per/2);
+		//drawLine([latlng0h,latlng1h],map,polylines,yellow);
+	}
+	
+}
+
+// global
+let map;
+
+function startMap() {
+	
+	//let map;
+	let polylines = [];
+	
+        var centerPoint = new google.maps.LatLng(23.74, 120.96);
+      
+      var mapSetting = {
+      zoom: 7,
+      center: centerPoint,
+      scaleControl: true,
+      streetViewControl: true,
+      mapTypeId: google.maps.MapTypeId.TERRAIN,
+      gestureHandling: "greedy",
+	  //tilt: 45,
+	  //mapId:"2ac8a2c068ebc12d"
+      }; 
+      // 放大值,中心點,比例尺,街景功能,地圖種類(一定要有)
+      
+      map = new google.maps.Map(document.getElementById("map-canvas"), mapSetting);
+
+      google.maps.event.addListener(map,'click',function(event){
+       getEventMarkerInfo(event,map,polylines); } 
+      );
+}
+      
+</script>  
+  </head>
+<body onload="">
+    <div class="container">
+		<div id="css_table">
+			<div class="css_tr">
+					<div class="css_td" >
+						<div id="map-canvas"></div>
+					</div>
+					<div class="css_td">
+						<div style="position: absolute;">
+							<img class="lat" src="./pic/22-120-10.png"/>
+							<img class="lat" src="./pic/22-121-10.png"/>
+							<img class="lat" src="./pic/23-120-10.png"/>
+						</div>
+					</div>
+			</div>
+	  </div>
+	</div>
+</body>
+</html>
+<script>
+  if(window.google && window.google.maps){
+      // the map API is already be loaded (from a previous button click, maybe)
+      startMap();
+  
+  } else if(!document.getElementById('google-map-script')) {
+      // the script tag is not present so add it to the DOM
+      var scriptTag = document.createElement('script');
+      scriptTag .id = 'google-map-script';
+      scriptTag .src = 'https://maps.googleapis.com/maps/api/js?key=AIzaSyBPWqfY7rCCyz-Xda_npvhfkIdK2vRfeFM&callback=startMap';
+      var head = document.getElementsByTagName('head')[0];
+      head.appendChild(scriptTag);
+  }
+  </script>
+
