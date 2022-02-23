@@ -1,6 +1,4 @@
-﻿<!DOCTYPE html>
-<html>
-
+﻿<html>
 <head>
 	<title>san2 styled map</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -51,7 +49,7 @@ function round(value, decimals) {
     case undefined : decimals = 0; break;
     default: decimals = parseInt(decimals);
   }
-  if(!decimals) decimals = 8;
+  decimals = isNaN(decimals) ? 0 : decimals;
   return Number(Math.round(value+'e'+decimals)+'e-'+decimals);
 }
 
@@ -84,20 +82,22 @@ function getEventMarkerInfo (e,map,polylines){
 	  var max = 1;
 	  var per = .1;
 	  var j = parseInt(max/per);
-	var lat0 = round(lat,1);
-	var lng0 = round(lng,1);
-	lat0 = parseInt(lat);
-	lng0 = parseInt(lng);
 	
-	// mod 2 for even or odd
-	if(lng0%2!=0) lat0+=max/2;
-	console.log(lat0,lng0);
+	// when lng is odd, lat + half
+	var lat0 = parseInt(lng)%2!=0 ? round(lat) - max/2 : parseInt(lat);
+
+	var lng0 = parseInt(lng);
 	
 	var latlng00 = getLatlng(lat0,lng0);
 	var latlng01 = getLatlng(lat0,lng0+max);
 	var latlng11 = getLatlng(lat0+max,lng0+max);
  	var latlng10 = getLatlng(lat0+max,lng0);
 	var box = [latlng00,latlng01,latlng11,latlng10,latlng00];
+	
+	var info = lat+','+lng + '\n';
+	var arr = [[lng0,lat0,0],[lng0,lat0+max,0],[lng0+max,lat0+max,0],[lng0+max,lat0,0],[lng0,lat0,0]];
+	document.getElementById('info').innerText = info + arr.join(' '); 
+	
 	var lat=lat0,lats = [lat0];
 	var lng=lng0,lngs = [lng0];
 	for(var i = 1; i<j;i++){
@@ -199,13 +199,24 @@ function startMap() {
 					</div>
 					<div class="css_td">
 						<div style="position: absolute;">
+							<p id="info">1</p>
+						<p>
+							<textarea id="data"></textarea>
+							<button id="data_sort" onclick="data_sort()">sort</button>
+						</p>
+						<p>3</p>
+						<!--
 							<img class="lat" src="./pic/22-120-10.png"/>
 							<img class="lat" src="./pic/22-121-10.png"/>
 							<img class="lat" src="./pic/23-120-10.png"/>
+						-->
 						</div>
 					</div>
 			</div>
 	  </div>
+	</div>
+	<div  style="display:block">
+	
 	</div>
 </body>
 </html>
@@ -222,5 +233,58 @@ function startMap() {
       var head = document.getElementsByTagName('head')[0];
       head.appendChild(scriptTag);
   }
-  </script>
+
+function data_sort(){
+  // process xml
+  var parser = new DOMParser();
+var str = document.getElementById('data').value;
+// clear tab & end line not necessary
+var strA = str.replace(/\r\n|\r|\n|\t/gm,'');
+var xmlDoc = parser.parseFromString(strA,'text/xml');
+
+var gos=[], groundOverlays = xmlDoc.getElementsByTagName('GroundOverlay');
+var multiple = 5;
+
+for(var i=0, total=groundOverlays.length; i < total;i++){
+	var go = groundOverlays[i];
+	var southStr = go.getElementsByTagName('south')[0].textContent;
+	var westStr = go.getElementsByTagName('west')[0].textContent;
+	var northStr = go.getElementsByTagName('north')[0].textContent;
+	var eastStr = go.getElementsByTagName('east')[0].textContent;
+	var name = go.getElementsByTagName('name')[0].textContent;
+	var south = round(round(parseFloat(southStr)/multiple,2)*multiple,2);
+	var west = round(parseFloat(westStr),1);
+	var north = round(round(parseFloat(northStr)/multiple,2)*multiple,2);
+	var east = round(parseFloat(eastStr),1);
+	var obj = {'south': south,
+				'west': west,
+				'north': north,
+				'east': east,
+				'name': name,
+				'go': go	
+			};
+	gos[i] = obj;
+	// rewrite round value
+	go.getElementsByTagName('south')[0].textContent = south;
+	go.getElementsByTagName('west')[0].textContent = west;
+	go.getElementsByTagName('north')[0].textContent = north;
+	go.getElementsByTagName('east')[0].textContent = east;
+			
+} 
+
+// sort 
+var ascendWest = (a,b)=>{return a['west']-b['west']}; // 小到大
+var descendSouth = (a,b)=>{return b['south']-a['south']}; // 大到小
+
+gos.sort(ascendWest);
+gos.sort(descendSouth);
+
+for(var i=0, total=gos.length; i < total;i++) xmlDoc.getElementsByTagName('Document')[0].appendChild(gos[i]['go']); 
+
+var xmlString = (new XMLSerializer()).serializeToString(xmlDoc);
+document.getElementById('data').value = xmlString;
+
+}
+
+</script>
 
