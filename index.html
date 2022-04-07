@@ -42,6 +42,11 @@ img.lat {
 
 </style>
 <script>
+
+let latlng_map_tile = {};
+
+((c)=>{
+	
 function round(value, decimals) { 
   switch(decimals){
     case 'xy': decimals = 2; break;
@@ -92,7 +97,7 @@ function drawLine(latlngs,map,polylines,option){
 	
 }
 
-function getEventMarkerInfo (e,map,features){
+c.getEventMarkerInfo = (e,map,features)=>{
 
       var lat = e.latLng.lat() ; 
       var lng = e.latLng.lng() ;
@@ -234,9 +239,10 @@ x.parentNode.removeChild(x);
 
 var xmlString = (new XMLSerializer()).serializeToString(xmlDoc);
 document.getElementById('kml_out').value = xmlString;
-}
 
-function data_sort(){
+};
+
+c.data_sort = ()=>{
   // process xml
   var parser = new DOMParser();
 var str = document.getElementById('data').value;
@@ -270,9 +276,8 @@ for(var i=0, total=groundOverlays.length; i < total;i++){
 	go.getElementsByTagName('south')[0].textContent = south;
 	go.getElementsByTagName('west')[0].textContent = west;
 	go.getElementsByTagName('north')[0].textContent = north;
-	go.getElementsByTagName('east')[0].textContent = east;
-			
-} 
+	go.getElementsByTagName('east')[0].textContent = east;		
+	} 
 
 // sort 
 var ascendWest = (a,b)=>{return a['west']-b['west']}; // 小到大
@@ -286,7 +291,10 @@ for(var i=0, total=gos.length; i < total;i++) xmlDoc.getElementsByTagName('Docum
 var xmlString = (new XMLSerializer()).serializeToString(xmlDoc);
 document.getElementById('data').value = xmlString;
 
-}
+};
+
+})(latlng_map_tile);
+
 
 function startMap() {
 	
@@ -296,7 +304,7 @@ function startMap() {
 		,polylines:[]
 	};
 	
-        var centerPoint = new google.maps.LatLng(23.74, 120.96);
+    var centerPoint = new google.maps.LatLng(23.74, 120.96);
       
       var mapSetting = {
       zoom: 7,
@@ -311,6 +319,8 @@ function startMap() {
       // 放大值,中心點,比例尺,街景功能,地圖種類(一定要有)
       
       map = new google.maps.Map(document.getElementById("map-canvas"), mapSetting);
+
+	  var getEventMarkerInfo = latlng_map_tile.getEventMarkerInfo; 
 
       google.maps.event.addListener(map,'click',function(event){
        getEventMarkerInfo(event,map,features); } 
@@ -430,6 +440,9 @@ function startMap() {
 												</LineString>
 											</Placemark>
 										</Folder>
+										<Folder>
+											<name>feature</name>
+										</Folder>
 									</Document>
 									</kml>
 								</textarea>
@@ -442,7 +455,7 @@ function startMap() {
 						<span>
 							<h1>data round & sort</h1>
 							<textarea id="data"></textarea>
-							<button id="data_sort" onclick="data_sort()">sort</button>
+							<button id="data_sort" >sort</button>
 						</span>
 						<!--
 							<img class="lat" src="./pic/22-120-10.png"/>
@@ -474,11 +487,15 @@ function startMap() {
   }
 
 (()=>{
+
 	//html event bind
 	document.getElementById('kml_copy').addEventListener('click',()=>{
     	document.getElementById('kml_out').select();
     	document.execCommand('copy');
   	});	
+	
+	var data_sort = latlng_map_tile.data_sort;
+	document.getElementById('data_sort').addEventListener('click',data_sort);
 
 })();
 
