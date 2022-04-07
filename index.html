@@ -53,6 +53,10 @@ function round(value, decimals) {
   return Number(Math.round(value+'e'+decimals)+'e-'+decimals);
 }
 
+function floor(value, decimals) { 
+  return Number(Math.floor(value+'e'+decimals)+'e-'+decimals);
+}
+
 function getLatlng(lat,lng){
 var latlng = new google.maps.LatLng(lat,lng);
 return latlng;
@@ -66,7 +70,7 @@ function drawMarker(latlng,map,markers){
       ,title: latlng.toString()
 	} );
 
-	//marker.setMap(map);
+	marker.setMap(map);
 	markers.push(marker);
 }
 
@@ -82,7 +86,7 @@ function drawLine(latlngs,map,polylines,option){
       strokeWeight: 2
     };
 	if(option) optionNow = option;
-    polyline.setOptions( optionNow);
+    polyline.setOptions(optionNow);
 	polyline.setMap(map);
 	polylines.push(polyline)
 	
@@ -94,107 +98,106 @@ function getEventMarkerInfo (e,map,features){
       var lng = e.latLng.lng() ;
 	  var max = 1;
 	  var per = .1;
-	  var j = parseInt(max/per);
-	
-	// when lng is odd, lat + half
-	var lat0 = parseInt(lng)%2!=0 ? round(lat) - max/2 : parseInt(lat);
 
-	var lng0 = parseInt(lng);
-	
-	var latlng00 = getLatlng(lat0,lng0);
-	var latlng01 = getLatlng(lat0,lng0+max);
-	var latlng11 = getLatlng(lat0+max,lng0+max);
- 	var latlng10 = getLatlng(lat0+max,lng0);
-	var box = [latlng00,latlng01,latlng11,latlng10,latlng00];
-	
-	var info = round(lat,6)+','+round(lng,6) + "<br/>";
-	var arr = [[lng0,lat0,0],[lng0,lat0+max,0],[lng0+max,lat0+max,0],[lng0+max,lat0,0],[lng0,lat0,0]];
-	document.getElementById('info').innerHTML = info + arr.join(' '); 
-	
-	var lat=lat0,lats = [lat0];
-	var lng=lng0,lngs = [lng0];
-	for(var i = 1; i<j;i++){
-		lat+=per,lng+=per;
-		
-		lats.push(round(lat,2));
-		lngs.push(round(lng,2));
-	}
-	// clear first
-		// from features
+	  var boxs = [];
+	  var lines = [];
+	// from features
 	var markers = features['markers'];		
 	var polylines = features['polylines'];
+	// clear first
+	var clearFirst = ()=>{
+		if(polylines.length > 0){
+			for(var i = 0; i<polylines.length;i++) polylines[i].setMap(null);
+			polylines.length = 0;
+		}
+		if(markers.length > 0){
+			for(var i = 0; i<markers.length;i++) markers[i].setMap(null);
+			markers.length = 0;
+		}
+	};
 
-	if(polylines.length > 0){
-		for(var i = 0; i<polylines.length;i++) polylines[i].setMap(null);
-		polylines.length = 0;
-	}
-		
-	if(markers.length > 0){
-		for(var i = 0; i<markers.length;i++) markers[i].setMap(null);
-		markers.length = 0;
-	}
+	clearFirst();
 	
-	// draw outer box
-	drawLine(box,map,polylines);
-	// draw line 0 half
+	// setting
 	var yellow = {
 			strokeColor: "#FFFF00",
 			strokeOpacity: 1,//.5,
 			strokeWeight: 1
 		};
-	var latlng0h0 = getLatlng(lat0+per/2,lng0);
-	var latlng0h1 = getLatlng(lat0+per/2,lng0+max);
-	var latlng00h = getLatlng(lat0,lng0+per/2);
-	var latlng01h = getLatlng(lat0+max,lng0+per/2);
-	//drawLine([latlng0h0,latlng0h1],map,polylines,yellow);
-	//drawLine([latlng00h,latlng01h],map,polylines,yellow);
+		
+	var calc = (lat,lng,max,per,boxs,lines,markers,polylines,map,isInfo)=>{
+	// when lng is odd, lat + half
+	var d = (max).toString().split('.')[1] ? (max).toString().split('.')[1].length : 0 ;
+	var oe = parseFloat(floor(lng,d)+('e'+d))%2!=0 ? 1 : 0;
+	// base west south point
+	var lat0 = parseFloat(floor(lng,d)+('e'+d))%2!=0 ? round(round(lat,d) - max/2,d+oe) : floor(lat,d);
+	var lng0 = floor(lng,d);
 	
-	// draw line from lats
+	// draw outer box
+	var latlng00 = getLatlng(lat0,lng0);
+	var latlng01 = getLatlng(lat0,round(lng0+max,d));
+	var latlng11 = getLatlng(round(lat0+max,d+oe),round(lng0+max,d));
+ 	var latlng10 = getLatlng(round(lat0+max,d+oe),lng0);
+	var box = [latlng00,latlng01,latlng11,latlng10,latlng00];
+	boxs.push(box);
+	drawLine(box,map,polylines);
+	
+	// info
+	var info = round(lat,6)+','+round(lng,6) + "<br/>";
+	var arr = [[lng0,lat0,0],
+	[lng0,latlng10.lat(),0],
+	[latlng11.lng(),latlng11.lat(),0],
+	[latlng01.lng(),lat0,0],
+	[lng0,lat0,0]];
+	if(isInfo) document.getElementById('info').innerHTML = info + arr.join(' '); 
+	
+	// calc all small west south point with per
+	var latA=lat0, lats = [lat0];
+	var lngA=lng0, lngs = [lng0];
+	for(var i = 1; i<parseInt(max/per);i++){
+		latA+=per,lngA+=per;	
+		lats.push(round(latA,d+2));
+		lngs.push(round(lngA,d+2));
+	}
+	// for lats draw marker
 	for(var i=0; i<lats.length;i++){
 		for(var j=0; j<lngs.length;j++){
 			var latA = lats[i];
 			var lngA = lngs[j];
 			if(j%2!=0){
-				latA = round(lats[i] - per/2,2);
-				//lngA = lngs[j];
+				latA = round(lats[i] - per/2,d+2);
 			} 
-			var latlng0 = getLatlng(latA,lngA)
-			var latlng1 = getLatlng(latA,lngA+per);
+			var latlng0 = getLatlng(latA,lngA);
 			drawMarker(latlng0,map,markers);
-			//drawLine([latlng0,latlng1],map,polylines,yellow);
 		}
-		// half 
-		var latlng0h = getLatlng(lats[i]+per/2,lng0)
-		var latlng1h = getLatlng(lats[i]+per/2,lng0+max);
-		//drawLine([latlng0h,latlng1h],map,polylines,yellow);
 	}	
-	// draw line from lngs
-	for(var i=0; i<lngs.length;i++){
-		var latA = lat0;
-		if(i%2!=0) latA = lat0 - per / 2 ;
-		var latlng0 = getLatlng(latA,lngs[i])
-		var latlng1 = getLatlng(latA+max,lngs[i]);
-		//drawLine([latlng0,latlng1],map,polylines,yellow);
-		// half
-		var latlng0h = getLatlng(lat0,lngs[i]+per/2)
-		var latlng1h = getLatlng(lat0+max,lngs[i]+per/2);
-		//drawLine([latlng0h,latlng1h],map,polylines,yellow);
-	}
 	// for markers draw line
-	var lines = [];
 	for(var i=0; i<markers.length;i++){
 		var marker = markers[i];
 		var latlng = marker.getPosition();
-		var lat = latlng.lat(), lng = latlng.lng();
+		var latA = latlng.lat(), lngA = latlng.lng();
 		var n = {'sw':latlng
-				,'wn':getLatlng(round(lat+per,2),lng)
-				,'en':getLatlng(round(lat+per,2),round(lng+per,2))
-				,'es': getLatlng(lat,round(lng+per,2))
+				,'wn':getLatlng(round(latA+per,d+2),lngA)
+				,'en':getLatlng(round(latA+per,d+2),round(lngA+per,d+2))
+				,'es': getLatlng(latA,round(lngA+per,d+2))
 			}
 		var latlngs = [n['sw'],n['wn'],n['en'],n['es'],n['sw']];
-		lines.push(latlngs);
 		drawLine(latlngs,map,polylines,yellow);
-	}
+		// store all draw
+		lines.push(latlngs);
+		}
+	// clear markers
+	if(markers.length > 0){
+			for(var i = 0; i<markers.length;i++) markers[i].setMap(null);
+			markers.length = 0;
+		}	
+
+	};
+	// lat,lng,max,per,box,lines,markers,polylines,map,isInfo
+	calc(lat,lng,max,per,boxs,lines,markers,polylines,map,true);
+	//calc(lat,lng,0.1,0.01,boxs,lines,markers,polylines,map);
+	//calc(lat,lng,0.01,0.001,boxs,lines,markers,polylines,map);
+	
 // load kml
 var parser = new DOMParser();
 var str = document.getElementById('kml_in').value;
@@ -205,6 +208,7 @@ var xmlDoc = parser.parseFromString(strA,'text/xml');
 var placemarks = xmlDoc.getElementsByTagName('Placemark');
 var polygons = xmlDoc.getElementsByTagName('Polygon');
 // kml name
+var box = boxs[0];
 var name = box[0].lat()+','+box[0].lng();
 var names = xmlDoc.getElementsByTagName('name');
 names[0].textContent = 'san2-'+name;
@@ -230,6 +234,58 @@ x.parentNode.removeChild(x);
 
 var xmlString = (new XMLSerializer()).serializeToString(xmlDoc);
 document.getElementById('kml_out').value = xmlString;
+}
+
+function data_sort(){
+  // process xml
+  var parser = new DOMParser();
+var str = document.getElementById('data').value;
+// clear tab & end line not necessary
+var strA = str.replace(/\r\n|\r|\n|\t/gm,'');
+var xmlDoc = parser.parseFromString(strA,'text/xml');
+
+var gos=[], groundOverlays = xmlDoc.getElementsByTagName('GroundOverlay');
+var multiple = 5;
+// round
+for(var i=0, total=groundOverlays.length; i < total;i++){
+	var go = groundOverlays[i];
+	var southStr = go.getElementsByTagName('south')[0].textContent;
+	var westStr = go.getElementsByTagName('west')[0].textContent;
+	var northStr = go.getElementsByTagName('north')[0].textContent;
+	var eastStr = go.getElementsByTagName('east')[0].textContent;
+	var name = go.getElementsByTagName('name')[0].textContent;
+	var south = round(round(parseFloat(southStr)/multiple,2)*multiple,2);
+	var west = round(parseFloat(westStr),1);
+	var north = round(round(parseFloat(northStr)/multiple,2)*multiple,2);
+	var east = round(parseFloat(eastStr),1);
+	var obj = {'south': south,
+				'west': west,
+				'north': north,
+				'east': east,
+				'name': name,
+				'go': go	
+			};
+	gos[i] = obj;
+	// rewrite round value
+	go.getElementsByTagName('south')[0].textContent = south;
+	go.getElementsByTagName('west')[0].textContent = west;
+	go.getElementsByTagName('north')[0].textContent = north;
+	go.getElementsByTagName('east')[0].textContent = east;
+			
+} 
+
+// sort 
+var ascendWest = (a,b)=>{return a['west']-b['west']}; // 小到大
+var descendSouth = (a,b)=>{return b['south']-a['south']}; // 大到小
+
+gos.sort(ascendWest);
+gos.sort(descendSouth);
+
+for(var i=0, total=gos.length; i < total;i++) xmlDoc.getElementsByTagName('Document')[0].appendChild(gos[i]['go']); 
+
+var xmlString = (new XMLSerializer()).serializeToString(xmlDoc);
+document.getElementById('data').value = xmlString;
+
 }
 
 function startMap() {
@@ -413,58 +469,6 @@ function startMap() {
       var head = document.getElementsByTagName('head')[0];
       head.appendChild(scriptTag);
   }
-
-function data_sort(){
-  // process xml
-  var parser = new DOMParser();
-var str = document.getElementById('data').value;
-// clear tab & end line not necessary
-var strA = str.replace(/\r\n|\r|\n|\t/gm,'');
-var xmlDoc = parser.parseFromString(strA,'text/xml');
-
-var gos=[], groundOverlays = xmlDoc.getElementsByTagName('GroundOverlay');
-var multiple = 5;
-
-for(var i=0, total=groundOverlays.length; i < total;i++){
-	var go = groundOverlays[i];
-	var southStr = go.getElementsByTagName('south')[0].textContent;
-	var westStr = go.getElementsByTagName('west')[0].textContent;
-	var northStr = go.getElementsByTagName('north')[0].textContent;
-	var eastStr = go.getElementsByTagName('east')[0].textContent;
-	var name = go.getElementsByTagName('name')[0].textContent;
-	var south = round(round(parseFloat(southStr)/multiple,2)*multiple,2);
-	var west = round(parseFloat(westStr),1);
-	var north = round(round(parseFloat(northStr)/multiple,2)*multiple,2);
-	var east = round(parseFloat(eastStr),1);
-	var obj = {'south': south,
-				'west': west,
-				'north': north,
-				'east': east,
-				'name': name,
-				'go': go	
-			};
-	gos[i] = obj;
-	// rewrite round value
-	go.getElementsByTagName('south')[0].textContent = south;
-	go.getElementsByTagName('west')[0].textContent = west;
-	go.getElementsByTagName('north')[0].textContent = north;
-	go.getElementsByTagName('east')[0].textContent = east;
-			
-} 
-
-// sort 
-var ascendWest = (a,b)=>{return a['west']-b['west']}; // 小到大
-var descendSouth = (a,b)=>{return b['south']-a['south']}; // 大到小
-
-gos.sort(ascendWest);
-gos.sort(descendSouth);
-
-for(var i=0, total=gos.length; i < total;i++) xmlDoc.getElementsByTagName('Document')[0].appendChild(gos[i]['go']); 
-
-var xmlString = (new XMLSerializer()).serializeToString(xmlDoc);
-document.getElementById('data').value = xmlString;
-
-}
 
 </script>
 
