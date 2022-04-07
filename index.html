@@ -328,12 +328,12 @@ function startMap() {
 					</div>
 					<div class="css_td">
 						<div style="position: absolute;">
-							<p>
+							<span>
 								<h1>info</h1>
 								<div id="info"></div>
-							</p>
-							<p>
-								<h1>kml input</h1>
+							</span>
+							<span style="display:none">
+								<h1>kml unit</h1>
 								<textarea id="kml_in">
 									<?xml version="1.0" encoding="UTF-8"?>
 									<kml xmlns="http://www.opengis.net/kml/2.2" xmlns:gx="http://www.google.com/kml/ext/2.2" xmlns:kml="http://www.opengis.net/kml/2.2" xmlns:atom="http://www.w3.org/2005/Atom">
@@ -433,14 +433,17 @@ function startMap() {
 									</Document>
 									</kml>
 								</textarea>
-								<h1>kml output</h1>	
+							</span>
+							<span>
+								<h1>kml grid</h1>	
 								<textarea id="kml_out"></textarea>
-							</p>
-						<p>
+								<button id="kml_copy">copy</button>
+							</span>
+						<span>
 							<h1>data round & sort</h1>
 							<textarea id="data"></textarea>
 							<button id="data_sort" onclick="data_sort()">sort</button>
-						</p>
+						</span>
 						<!--
 							<img class="lat" src="./pic/22-120-10.png"/>
 							<img class="lat" src="./pic/22-121-10.png"/>
@@ -469,6 +472,15 @@ function startMap() {
       var head = document.getElementsByTagName('head')[0];
       head.appendChild(scriptTag);
   }
+
+(()=>{
+	//html event bind
+	document.getElementById('kml_copy').addEventListener('click',()=>{
+    	document.getElementById('kml_out').select();
+    	document.execCommand('copy');
+  	});	
+
+})();
 
 </script>
 
