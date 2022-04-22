@@ -111,7 +111,7 @@ let _decimal = 1;
 
 let _kml = {
 	'click' : {'boxs':[],'lines':[]},
-	'load' : {'boxs':[],'lines':[],'markers':[]}
+	'load' : {'boxs':[],'lines':[]}
 };
 
 function round(value, decimals) { 
@@ -174,17 +174,13 @@ c.getEventMarkerInfo = (e,map,features)=>{
 	  var boxs = [];
 	  var lines = [];
 	// from features
-	var markers = features['markers'];		
+	var pts = [];		
 	var polylines = features['polylines'];
 	// clear first
 	var clearFirst = ()=>{
 		if(polylines.length > 0){
 			for(var i = 0; i<polylines.length;i++) polylines[i].setMap(null);
 			polylines.length = 0;
-		}
-		if(markers.length > 0){
-			for(var i = 0; i<markers.length;i++) markers[i].setMap(null);
-			markers.length = 0;
 		}
 	};
 
@@ -197,7 +193,7 @@ c.getEventMarkerInfo = (e,map,features)=>{
 			strokeWeight: 1
 		};
 		
-	var calc = (lat,lng,max,per,boxs,lines,markers,polylines,map,isInfo)=>{
+	var calc = (lat,lng,max,per,boxs,lines,pts,polylines,map,isInfo)=>{
 	// when lng is odd, lat + half
 	var d = (max).toString().split('.')[1] ? (max).toString().split('.')[1].length : 0 ;
 	var oe = parseFloat(floor(lng,d)+('e'+d))%2!=0 ? 1 : 0;
@@ -231,7 +227,7 @@ c.getEventMarkerInfo = (e,map,features)=>{
 		lats.push(round(latA,d+2));
 		lngs.push(round(lngA,d+2));
 	}
-	// for lats draw marker
+	// for lats collect pts
 	for(var i=0; i<lats.length;i++){
 		for(var j=0; j<lngs.length;j++){
 			var latA = lats[i];
@@ -240,13 +236,12 @@ c.getEventMarkerInfo = (e,map,features)=>{
 				latA = round(lats[i] - per/2,d+2);
 			} 
 			var latlng0 = getLatlng(latA,lngA);
-			drawMarker(latlng0,map,markers);
+			pts.push(latlng0);
 		}
 	}	
-	// for markers draw line
-	for(var i=0; i<markers.length;i++){
-		var marker = markers[i];
-		var latlng = marker.getPosition();
+	// for pts draw line
+	for(var i=0; i<pts.length;i++){
+		var latlng = pts[i];
 		var latA = latlng.lat(), lngA = latlng.lng();
 		var n = {'sw':latlng
 				,'wn':getLatlng(round(latA+per,d+2),lngA)
@@ -258,15 +253,12 @@ c.getEventMarkerInfo = (e,map,features)=>{
 		// store all draw
 		lines.push(latlngs);
 		}
-	// markers no map
-	if(markers.length > 0) for(var i = 0; i<markers.length;i++) markers[i].setMap(null);
-			
 
 	};
-	// lat,lng,max,per,box,lines,markers,polylines,map,isInfo
-	calc(lat,lng,max,per,boxs,lines,markers,polylines,map,true);
-	//calc(lat,lng,0.1,0.01,boxs,lines,markers,polylines,map);
-	//calc(lat,lng,0.01,0.001,boxs,lines,markers,polylines,map);
+	// lat,lng,max,per,box,lines,pts,polylines,map,isInfo
+	calc(lat,lng,max,per,boxs,lines,pts,polylines,map,true);
+	//calc(lat,lng,0.1,0.01,boxs,lines,pts,polylines,map);
+	//calc(lat,lng,0.01,0.001,boxs,lines,pts,polylines,map);
 	
 // load kml
 var parser = new DOMParser();
@@ -312,7 +304,7 @@ document.getElementById('kml_out').value = xmlString;
 // boxs & lines 
 _kml['click']={'boxs':boxs,'lines':lines};
 
-return {'boxs':boxs,'lines':lines,'markers':markers}
+return {'boxs':boxs,'lines':lines,'pts':pts}
 
 };
 
@@ -394,11 +386,18 @@ if(last <= 0){
 	load = c.getEventMarkerInfo(e,c.map,c.features);
 } 
 
-// show markers
-for (var i = 0; i < load.markers.length; i++) load.markers[i].setMap(c.map);
+//clear marker first
+var markers = c.features['markers'];
+if(markers.length > 0){
+			for(var i = 0; i<markers.length;i++) markers[i].setMap(null);
+			markers.length = 0;
+}
+// draw markers
+var pts=load['pts'];
+for (var i = 0; i < pts.length; i++) drawMarker(pts[i],c.map,markers);
 
 // split markers per 10
-var arr=[], markers=load.markers;
+var arr=[];
 for (var i = 0; i < markers.length; i += 10) {
     var chunk = markers.slice(i, i + 10);
     arr.push(chunk);
@@ -487,7 +486,6 @@ for(var i=0;i<rows.length;i++){
 }
 
 _kml['load']=load;
-_kml['load']['markers']=markers;
 
  };
 
@@ -496,8 +494,7 @@ _kml['load']['markers']=markers;
 	var load = _kml['load'];
 	var box = load['boxs'][0];
 	var lines = load['lines'];
-	var markers = load['markers'];
-
+	
 	 var parser = new DOMParser();
 	 var str = document.getElementById('kml_in').value;
 	 // clear tab & end line not necessary
