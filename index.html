@@ -107,15 +107,20 @@ const _list1 = {
 ,'tree':['林','https://raw.githubusercontent.com/enhexranger/san2-styled-map/main/icon/tree.png']
 ,'dq2s1':['沙','https://raw.githubusercontent.com/enhexranger/san2-styled-map/main/icon/dq2s1.png']
 ,'dq2w3':['礁','https://raw.githubusercontent.com/enhexranger/san2-styled-map/main/icon/dq2w3.png']
-
 ,'empty':[' ','']
 };	
 
 const _list2 = ['mountain','hill','grass','tree','water','castle','city','dq2s1','dq2w3'];
 
-let _markersMap = {};
+const _grid = {
+	'km_10': { 'max': 1, 'per': 0.1, 'name':'10 km' },
+	'km_1': { 'max': .1, 'per': 0.01, 'name':'1 km' },
+	'm_100': { 'max': .01, 'per': 0.001, 'name':'100m' }
+};
 
-let _decimal = 1;
+let _gridNow = _grid['km_10'];
+
+let _markersMap = {};
 
 let _kml = {
 	'click' : {'boxs':[],'lines':[]},
@@ -172,12 +177,49 @@ function drawLine(latlngs,map,polylines,option){
 	
 }
 
-c.getEventMarkerInfo = (e,map,features)=>{
+let getDecimal = (max)=>{
+	return (max).toString().split('.')[1] ? (max).toString().split('.')[1].length : 0 ;
+};
+
+let getOddExt = (d,lng)=>{
+	return parseFloat(floor(lng,d)+('e'+d))%2!=0 ? 1 : 0;
+};
+
+let getXmlDoc = (id)=>{
+	var parser = new DOMParser();
+	var str = document.getElementById(id).value;
+	// clear tab & end line not necessary
+	var strA = str.replace(/\r\n|\r|\n|\t/gm, '');
+	var xmlDoc = parser.parseFromString(strA, 'text/xml');
+	return xmlDoc;
+};
+
+let putXmlDoc = (id,xmlDoc)=>{
+	var xmlString = (new XMLSerializer()).serializeToString(xmlDoc);
+	document.getElementById(id).value = xmlString;
+};
+
+let arrNextIndex = (arr,v,k)=>{
+	var i = !isNaN(k) ? arr.findIndex(x=>x[k]==v) : arr.findIndex(x=>x==v) ;
+	return i==(arr.length-1) ? 0 : i+1 ;
+};
+
+c.gridLevelChange = ()=>{
+	var input = document.getElementById('grid_level');
+	var name=input.value, names = [];
+	for(var k in _grid) names.push([k,_grid[k]['name']]);
+	var j = arrNextIndex(names,name,1);
+	input.value = names[j][1];
+	
+	_gridNow = _grid[names[j][0]];
+};
+
+c.click_grid = (e,map,features)=>{
 
       var lat = e.latLng.lat() ; 
       var lng = e.latLng.lng() ;
-	  var max = 1;
-	  var per = .1;
+	  var max = _gridNow['max'];
+	  var per = _gridNow['per'];
 
 	  var boxs = [];
 	  var lines = [];
@@ -203,8 +245,8 @@ c.getEventMarkerInfo = (e,map,features)=>{
 		
 	var calc = (lat,lng,max,per,boxs,lines,pts,polylines,map,isInfo)=>{
 	// when lng is odd, lat + half
-	var d = (max).toString().split('.')[1] ? (max).toString().split('.')[1].length : 0 ;
-	var oe = parseFloat(floor(lng,d)+('e'+d))%2!=0 ? 1 : 0;
+	var d = getDecimal(max);
+	var oe = getOddExt(d,lng);
 	// base west south point
 	var lat0 = parseFloat(floor(lng,d)+('e'+d))%2!=0 ? round(round(lat,d) - max/2,d+oe) : floor(lat,d);
 	var lng0 = floor(lng,d);
@@ -269,11 +311,7 @@ c.getEventMarkerInfo = (e,map,features)=>{
 	//calc(lat,lng,0.01,0.001,boxs,lines,pts,polylines,map);
 	
 // load kml
-var parser = new DOMParser();
-var str = document.getElementById('kml_in').value;
-// clear tab & end line not necessary
-var strA = str.replace(/\r\n|\r|\n|\t/gm,'');
-var xmlDoc = parser.parseFromString(strA,'text/xml');
+var xmlDoc = getXmlDoc('kml_in');
 
 var placemarks = xmlDoc.getElementsByTagName('Placemark');
 var polygons = xmlDoc.getElementsByTagName('Polygon');
@@ -306,9 +344,7 @@ x.parentNode.removeChild(x);
 var x = xmlDoc.getElementsByTagName("GroundOverlay")[0];
 x.parentNode.removeChild(x);
 
-var xmlString = (new XMLSerializer()).serializeToString(xmlDoc);
-document.getElementById('kml_out').value = xmlString;
-
+putXmlDoc('kml_out',xmlDoc);
 // boxs & lines 
 _kml['click']={'boxs':boxs,'lines':lines};
 
@@ -318,15 +354,11 @@ return {'boxs':boxs,'lines':lines,'pts':pts}
 
 c.data_sort = ()=>{
   // process xml
-  var parser = new DOMParser();
-var str = document.getElementById('data').value;
-// clear tab & end line not necessary
-var strA = str.replace(/\r\n|\r|\n|\t/gm,'');
-var xmlDoc = parser.parseFromString(strA,'text/xml');
+var xmlDoc = getXmlDoc('data');
 
 var gos=[], groundOverlays = xmlDoc.getElementsByTagName('GroundOverlay');
 const multiple = 5;
-var d = _decimal;
+var d = getDecimal(_gridNow['max']);
 // round
 for(var i=0, total=groundOverlays.length; i < total;i++){
 	var go = groundOverlays[i];
@@ -369,17 +401,16 @@ for(var i=0;i<folders.length;i++){
 if(featuresFolder == undefined) featuresFolder = xmlDoc.getElementsByTagName('Document')[0];
 for(var i=0, total=gos.length; i < total;i++) featuresFolder.appendChild(gos[i]['go']); 
 
-var xmlString = (new XMLSerializer()).serializeToString(xmlDoc);
-document.getElementById('data').value = xmlString;
+putXmlDoc('data',xmlDoc);
 
-// call getEventMarkerInfo (grid)
+// call click_grid
 var last = gos.length-1;
 var load = {};
 
 if(last <= 0){
 	var arr = xmlDoc.getElementsByTagName('Placemark')[0].textContent.split('#')[0].split(',');
 	var e = {'latLng': getLatlng(arr[0],arr[1]) };
-	load = c.getEventMarkerInfo(e,c.map,c.features);
+	load = c.click_grid(e,c.map,c.features);
 	
 }else{
 	var latlngNW = new google.maps.LatLng(gos[0]['north'], gos[0]['west']);
@@ -391,7 +422,7 @@ if(last <= 0){
 	c.map.fitBounds(bounds);
 
 	var e = {'latLng':getLatlng(gos[0]['south'], gos[0]['west'])};
-	load = c.getEventMarkerInfo(e,c.map,c.features);
+	load = c.click_grid(e,c.map,c.features);
 } 
 
 //clear marker first
@@ -474,8 +505,7 @@ for(var i=0;i<rows.length;i++){
 		// marker & btn event
 		let event = ()=>{
 			var name = marker.getTitle();
-			var i = _list2.findIndex(x=>x==name);
-			var j = i==(_list2.length-1) ? 0 : i+1 ;
+			var j = arrNextIndex(_list2,name);
 			var name2 = _list2[j];
 			marker.setTitle(name2);
 			marker.setIcon({'url':_list1[name2][1],'scaledSize':new google.maps.Size(32,32)}); 
@@ -503,11 +533,7 @@ _kml['load']=load;
 	var box = load['boxs'][0];
 	var lines = load['lines'];
 	
-	 var parser = new DOMParser();
-	 var str = document.getElementById('kml_in').value;
-	 // clear tab & end line not necessary
-	 var strA = str.replace(/\r\n|\r|\n|\t/gm, '');
-	 var xmlDoc = parser.parseFromString(strA, 'text/xml');
+	var xmlDoc = getXmlDoc('kml_in');
 
 	 var placemarks = xmlDoc.getElementsByTagName('Placemark');
 	 var polygons = xmlDoc.getElementsByTagName('Polygon');
@@ -556,8 +582,7 @@ _kml['load']=load;
 	 var x = xmlDoc.getElementsByTagName("GroundOverlay")[0];
 	 x.parentNode.removeChild(x);
 
-	 var xmlString = (new XMLSerializer()).serializeToString(xmlDoc);
-	 document.getElementById('data').value = xmlString;
+	 putXmlDoc('data',xmlDoc);
  };
 
 })(latlng_map_tile);
@@ -589,10 +614,10 @@ function startMap() {
 
 	  latlng_map_tile.map = map;
 	  latlng_map_tile.features = features;
-	  var getEventMarkerInfo = latlng_map_tile.getEventMarkerInfo; 
+	  var click_grid = latlng_map_tile.click_grid; 
 
       google.maps.event.addListener(map,'click',function(event){
-       getEventMarkerInfo(event,map,features); } 
+       click_grid(event,map,features); } 
       );
 }
       
@@ -730,7 +755,9 @@ function startMap() {
 								</textarea>
 							</span>
 							<span>
-								<h1>kml grid</h1>	
+								<h1>kml grid
+									<input type="button" id="grid_level" value="10 km"/>
+									</h1>	
 								<textarea id="kml_out"></textarea>
 								<button id="kml_copy">copy</button>
 							</span>
@@ -800,6 +827,9 @@ function startMap() {
 
 	var kml_write = latlng_map_tile.kml_write;
 	document.getElementById('kml_write').addEventListener('click',kml_write);
+
+	var gridLevelChange = latlng_map_tile.gridLevelChange;
+	document.getElementById('grid_level').addEventListener('click',gridLevelChange);
 
 })();
 
