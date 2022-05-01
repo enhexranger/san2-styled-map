@@ -358,7 +358,7 @@ var xmlDoc = getXmlDoc('data');
 
 var gos=[], groundOverlays = xmlDoc.getElementsByTagName('GroundOverlay');
 var mx = _multiple;
-var d = getDecimal(_gridNow['max']);
+var d = getDecimal(_gridNow['max'])+1;
 // round
 for(var i=0, total=groundOverlays.length; i < total;i++){
 	var go = groundOverlays[i];
