@@ -118,6 +118,8 @@ const _grid = {
 	'm_100': { 'max': .01, 'per': 0.001, 'name':'100m' }
 };
 
+const _multiple = 5 ;
+
 let _gridNow = _grid['km_10'];
 
 let _markersMap = {};
@@ -305,10 +307,8 @@ c.click_grid = (e,map,features)=>{
 		}
 
 	};
-	// lat,lng,max,per,box,lines,pts,polylines,map,isInfo
+
 	calc(lat,lng,max,per,boxs,lines,pts,polylines,map,true);
-	//calc(lat,lng,0.1,0.01,boxs,lines,pts,polylines,map);
-	//calc(lat,lng,0.01,0.001,boxs,lines,pts,polylines,map);
 	
 // load kml
 var xmlDoc = getXmlDoc('kml_in');
@@ -357,7 +357,7 @@ c.data_sort = ()=>{
 var xmlDoc = getXmlDoc('data');
 
 var gos=[], groundOverlays = xmlDoc.getElementsByTagName('GroundOverlay');
-const multiple = 5;
+var mx = _multiple;
 var d = getDecimal(_gridNow['max']);
 // round
 for(var i=0, total=groundOverlays.length; i < total;i++){
@@ -367,9 +367,9 @@ for(var i=0, total=groundOverlays.length; i < total;i++){
 	var northStr = go.getElementsByTagName('north')[0].textContent;
 	var eastStr = go.getElementsByTagName('east')[0].textContent;
 	var name = go.getElementsByTagName('name')[0].textContent;
-	var south = round(round(parseFloat(southStr)/multiple,d+1)*multiple,d+1);
+	var south = round(round(parseFloat(southStr)/mx,d+1)*mx,d+1);
 	var west = round(parseFloat(westStr),d);
-	var north = round(round(parseFloat(northStr)/multiple,d+1)*multiple,d+1);
+	var north = round(round(parseFloat(northStr)/mx,d+1)*mx,d+1);
 	var east = round(parseFloat(eastStr),d);
 	var obj = {'south': south,
 				'west': west,
@@ -801,6 +801,9 @@ function startMap() {
 </body>
 </html>
 <script>
+
+(()=>{
+
   if(window.google && window.google.maps){
       // the map API is already be loaded (from a previous button click, maybe)
       startMap();
@@ -813,8 +816,6 @@ function startMap() {
       var head = document.getElementsByTagName('head')[0];
       head.appendChild(scriptTag);
   }
-
-(()=>{
 
 	//html event bind
 	document.getElementById('kml_copy').addEventListener('click',()=>{
