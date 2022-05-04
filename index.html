@@ -413,17 +413,14 @@ if(last <= 0){
 	load = c.click_grid(e,c.map,c.features);
 	
 }else{
-	var latlngNW = new google.maps.LatLng(gos[0]['north'], gos[0]['west']);
-	var latlngSE = new google.maps.LatLng(gos[last]['south'], gos[last]['east']);
-
-	var bounds = new google.maps.LatLngBounds();
-	bounds.extend(latlngNW);
-	bounds.extend(latlngSE);
-	c.map.fitBounds(bounds);
-
 	var e = {'latLng':getLatlng(gos[0]['south'], gos[0]['west'])};
 	load = c.click_grid(e,c.map,c.features);
 } 
+// fit bound with grid
+	var boxs = load['boxs'], bounds = new google.maps.LatLngBounds();
+	bounds.extend(boxs[0][0]);
+	bounds.extend(boxs[0][2]);
+	c.map.fitBounds(bounds);
 
 //clear marker first
 var markers = c.features['markers'];
