@@ -113,9 +113,9 @@ const _list1 = {
 const _list2 = ['mountain','hill','grass','tree','water','castle','city','dq2s1','dq2w3'];
 
 const _grid = {
-	'km_10': { 'max': 1, 'per': 0.1, 'name':'10 km' },
-	'km_1': { 'max': .1, 'per': 0.01, 'name':'1 km' },
-	'm_100': { 'max': .01, 'per': 0.001, 'name':'100m' }
+	'km_10': { 'max': 1, 'per': 0.1, 'name':'10 km', 'id':'km_10', 'metre':10000 },
+	'km_1': { 'max': .1, 'per': 0.01, 'name':'1 km', 'id':'km_1', 'metre':1000 },
+	'm_100': { 'max': .01, 'per': 0.001, 'name':'100m', 'id':'m_100', 'metre':100 }
 };
 
 const _multiple = 5 ;
@@ -276,8 +276,10 @@ c.click_grid = (e,map,features)=>{
 	var lngA=lng0, lngs = [lng0];
 	for(var i = 1; i<parseInt(max/per);i++){
 		latA+=per,lngA+=per;	
-		lats.push(round(latA,d+2));
-		lngs.push(round(lngA,d+2));
+		latA=round(latA,d+2);
+		lngA=round(lngA,d+2);
+		lats.push(latA);
+		lngs.push(lngA);
 	}
 	// for lats collect pts
 	for(var i=0; i<lats.length;i++){
