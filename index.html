@@ -91,6 +91,7 @@ input.fr.dq2w3 {
 }
 
 </style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.5.0/proj4.js"></script>
 <script>
 
 let latlng_map_tile = {};
@@ -113,9 +114,9 @@ const _list1 = {
 const _list2 = ['mountain','hill','grass','tree','water','castle','city','dq2s1','dq2w3'];
 
 const _grid = {
-	'km_10': { 'max': 1, 'per': 0.1, 'name':'10 km' },
-	'km_1': { 'max': .1, 'per': 0.01, 'name':'1 km' },
-	'm_100': { 'max': .01, 'per': 0.001, 'name':'100m' }
+	'km_10': { 'max': 1, 'per': 0.1, 'name':'10 km', 'id':'km_10', 'metre':10000 },
+	'km_1': { 'max': .1, 'per': 0.01, 'name':'1 km', 'id':'km_1', 'metre':1000 },
+	'm_100': { 'max': .01, 'per': 0.001, 'name':'100m', 'id':'m_100', 'metre':100 }
 };
 
 const _multiple = 5 ;
@@ -216,6 +217,155 @@ c.gridLevelChange = ()=>{
 	_gridNow = _grid[names[j][0]];
 };
 
+c.grid_GM = ()=>{
+
+const proj4_Defs = ()=>{
+	// ESPG:3857 google map mercator
+	const n ="EPSG:3857";
+	const zdef = "+proj=merc +a=6378137 +b=6378137 +lat_ts=0.0 +lon_0=0.0 +x_0=0.0 +y_0=0 +k=1.0 +units=m +nadgrids=@null +wktext  +no_defs";
+
+	proj4.defs([
+  [
+    "EPSG:4326",
+    "+title=WGS 84 (long/lat) +proj=longlat +ellps=WGS84 +datum=WGS84 +units=degrees"
+  ],
+  [n, zdef]]);
+  
+	};
+
+const ll2GM = (ll)=>{
+	let lat = ll[0], lon = ll[1];
+	const en_m = proj4("EPSG:4326", "EPSG:3857", [lon, lat]);
+  	const e0 = en_m[0].toFixed(0); //easting
+  	const n0 = en_m[1].toFixed(0); //northing
+	return [e0,n0];
+	};
+
+const gM2ll = (en_m) =>{
+	var r = proj4("EPSG:3857", "EPSG:4326", en_m); 
+	return [r[1],r[0]];
+};
+
+const getLLR = (ll,d)=>{
+	return [round(ll[0],d),round(ll[1],d)];
+};
+// chk grid
+if(!_kml['click']['boxs'][0]){alert('no grid'); return false;}
+
+var box = _kml['click']['boxs'][0];
+var boxDownLat = box[0].lat() - _gridNow['max'];  
+
+proj4_Defs();
+
+var en = ll2GM([box[0].lat(),box[0].lng()]);
+var enDown = ll2GM([boxDownLat,box[0].lng()]);
+var div = parseInt(_gridNow['max']/_gridNow['per']);
+
+var per = _gridNow['metre'];
+var max = parseInt(div*per);
+var en0 = [parseInt(en[0]/per)*per,parseInt(en[1]/per)*per];
+var enDown0 = [parseInt(enDown[0]/per)*per,parseInt(enDown[1]/per)*per];
+var nDiff = (en0[1]-enDown0[1]-div*per)/per;
+var news = {'ws':en0,'wn':[en0[0],en0[1]+max],'en':[en0[0]+max,en0[1]+max],'es':[en0[0]+max,en0[1]]};
+var boxEN = [news.ws,news.wn,news.en,news.es,news.ws];
+var box = [];
+boxEN.map(x=>{
+	var ll = gM2ll(x);
+	var llr = getLLR(ll,6);
+	var latlng = getLatlng(llr[0],llr[1]);
+	box.push(latlng);
+	});
+// draw box
+var lineColor1 = {
+			strokeColor: "red",
+			strokeOpacity: .5,
+			strokeWeight: 1
+		};
+		var lineColor2 = {
+			strokeColor: "red",
+			strokeOpacity: 1,
+			strokeWeight: 1
+		};
+drawLine(box,c.map,c.features.polylines,lineColor2);
+
+// collect every ws pt starting from west-north
+// even or odd determined by easting
+var od = parseInt(en[0]/per)%2 ? 'odd' : 'even' ;
+
+var cols=[], en1=[news.wn[0],news.wn[1]-per], lines=[];
+var colsMax = div+nDiff, rowsMax = div+1; // if div=10, RowsMax+1, div=20, RowsMax+2...
+for(var i=0; i < colsMax ; i++){
+	var row=[];
+	for(j=0; j < rowsMax ; j++){ 
+		var x = en1[0]+per*j;
+		var y = en1[1]-per*i;
+		// when row even shifting half -
+		if(j%2!=0) y = en1[1]-per*i - per/2;
+		if(od=='odd') y+=per/2;
+		// wn xy to grid
+		var n = {'sw':[x,y]
+				,'wn':[x,y+per]
+				,'en':[x+per,y+per]
+				,'es': [x+per,y]
+			};
+		// convert to latlng
+		var ll = gM2ll(n.sw);
+		var llr = getLLR(ll,6);
+		n.sw = getLatlng(llr[0],llr[1]);
+		var ll = gM2ll(n.wn);
+		var llr = getLLR(ll,6);
+		n.wn = getLatlng(llr[0],llr[1]);
+		var ll = gM2ll(n.en);
+		var llr = getLLR(ll,6);
+		n.en = getLatlng(llr[0],llr[1]);
+		var ll = gM2ll(n.es);
+		var llr = getLLR(ll,6);
+		n.es = getLatlng(llr[0],llr[1]);
+		var latlngs = [n.sw,n.wn,n.en,n.es,n.sw];
+		drawLine(latlngs,c.map,c.features.polylines,lineColor1);
+		
+		row[j]={'name':x+','+y,'latlngs':latlngs};
+		lines.push(row[j]);
+	}
+	cols[i]=row;
+	}
+
+// load kml
+var xmlDoc = getXmlDoc('kml_in');
+
+var placemarks = xmlDoc.getElementsByTagName('Placemark');
+var polygons = xmlDoc.getElementsByTagName('Polygon');
+// kml name
+var name = boxEN[0][0]+','+boxEN[0][1];
+var names = xmlDoc.getElementsByTagName('name');
+names[0].textContent = 'san2-'+name;
+names[names.length-1].textContent = name;
+// polygon value
+var txts = [];
+box.map((a,i)=>{txts.push(a.lng()+','+a.lat()+',0')});
+	// coordinate
+	polygons[0].getElementsByTagName('coordinates')[0].textContent = txts.join(' ');
+// line
+for(var i = 0 ; i < lines.length; i++){
+	var line = lines[i];
+	var txts = [];
+	line.latlngs.map((a,i)=>{txts.push(a.lng()+','+a.lat()+',0')});
+	var placemark = placemarks[0].cloneNode(true);
+	placemark.getElementsByTagName('name')[0].textContent = line.name;
+	placemark.getElementsByTagName('coordinates')[0].textContent = txts.join(' ');
+	xmlDoc.getElementsByTagName('Folder')[0].appendChild(placemark);
+	}
+// remove sample placemark
+var x = xmlDoc.getElementsByTagName("Placemark")[0];
+x.parentNode.removeChild(x);
+// delete default groundoverlay
+var x = xmlDoc.getElementsByTagName("GroundOverlay")[0];
+x.parentNode.removeChild(x);
+
+putXmlDoc('kml_out',xmlDoc);
+
+};
+
 c.click_grid = (e,map,features)=>{
 
       var lat = e.latLng.lat() ; 
@@ -275,9 +425,11 @@ c.click_grid = (e,map,features)=>{
 	var latA=lat0, lats = [lat0];
 	var lngA=lng0, lngs = [lng0];
 	for(var i = 1; i<parseInt(max/per);i++){
-		latA+=per,lngA+=per;	
-		lats.push(round(latA,d+2));
-		lngs.push(round(lngA,d+2));
+		latA+=per,lngA+=per;
+		latA=round(latA,d+2);
+		lngA=round(lngA,d+2);
+		lats.push(latA);
+		lngs.push(lngA);
 	}
 	// for lats collect pts
 	for(var i=0; i<lats.length;i++){
@@ -754,6 +906,7 @@ function startMap() {
 							<span>
 								<h1>kml grid
 									<input type="button" id="grid_level" value="10 km"/>
+									<input type="button" id="grid_GM" value="GM"/>
 									</h1>	
 								<textarea id="kml_out"></textarea>
 								<button id="kml_copy">copy</button>
@@ -828,6 +981,9 @@ function startMap() {
 
 	var gridLevelChange = latlng_map_tile.gridLevelChange;
 	document.getElementById('grid_level').addEventListener('click',gridLevelChange);
+
+	var grid_GM = latlng_map_tile.grid_GM;
+	document.getElementById('grid_GM').addEventListener('click',grid_GM);
 
 })();
 
