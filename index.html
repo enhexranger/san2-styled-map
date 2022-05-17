@@ -364,6 +364,98 @@ x.parentNode.removeChild(x);
 
 putXmlDoc('kml_out',xmlDoc);
 
+// first edit
+//clear marker first
+var markers = c.features['markers'];
+if(markers.length > 0){
+			for(var i = 0; i<markers.length;i++) markers[i].setMap(null);
+			markers.length = 0;
+}
+// draw markers
+lines.map(x=>{
+	var latlng = x.latlngs[0];
+	drawMarker(latlng,c.map,markers);
+});
+
+// markers to map
+_markersMap = {}; 
+for(var i in markers){
+	var marker = markers[i];
+	var line = lines[i];
+	//var key = line.name;
+	var key = marker.getPosition().lat()+'-'+marker.getPosition().lng(); // compromised
+	_markersMap[key]={'name':'','marker':marker,'terr':'','line':line.latlngs};
+}
+// markers to cols
+var i=0;
+cols.map(x=>{
+	x.map(y=>{
+		y.marker = markers[i];
+		i++;
+	});
+});
+
+// on html
+var fg = document.getElementById('feature_grid');
+var c0 = fg.children[0];
+// clean before append
+while(fg.children.length > 1){ fg.lastChild.remove(); }
+
+// process cols & rows
+for(var i=0;i<cols.length;i++){
+	var cN = c0.cloneNode(true);
+	var rows = cols[i];
+	for(var j=0;j<rows.length;j++){
+		var line = rows[j];
+		let marker = line.marker, btn=cN.children[j], terr='';
+		// new btn
+		if(!btn){
+			var input = cN.children[0].cloneNode(true);
+			// even odd
+			if(j%2!=0) input.classList.add('even');
+			cN.appendChild(input);
+			btn=cN.children[j];
+		}
+		// set cols 
+		if(terr.length==0){
+			btn.value = ' ';		
+		}else{
+			// if(_list1[terr]){
+			// 	btn.value = _list1[terr][0];
+			// 	btn.classList.add(terr);
+			// 	// marker
+			// 	marker.setIcon({'url':_list1[terr][1],'scaledSize':new google.maps.Size(32,32)});
+			// 	marker.setTitle(terr);
+			}
+		
+		// marker & btn event
+		let event = ()=>{
+			var terr = marker.getTitle();
+			var j = arrNextIndex(_list2,terr);
+			var terr2 = _list2[j];
+			marker.setTitle(terr2);
+			marker.setIcon({'url':_list1[terr2][1],'scaledSize':new google.maps.Size(32,32)}); 
+			// btn
+			btn.value=_list1[terr2][0];
+			if(btn.classList.contains(terr)) btn.classList.remove(terr);
+			btn.classList.add(terr2);
+			// map
+			var key = marker.getPosition().lat()+'-'+marker.getPosition().lng(); // compromised
+			_markersMap[key]['terr']=terr2;
+			_markersMap[key]['name']=terr2; // compromised
+		};
+
+		marker.addListener('click',event); 
+		btn.addEventListener('click',event);
+	} // for j
+	fg.appendChild(cN);
+} // for i	
+
+var arr = [];
+lines.map(x=>{
+	arr.push(x.latlngs); // compromised
+});
+_kml['load']={'boxs':[box],'lines':arr};
 };
 
 c.click_grid = (e,map,features)=>{
