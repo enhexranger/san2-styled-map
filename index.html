@@ -206,6 +206,22 @@ let arrNextIndex = (arr,v,k)=>{
 	return i==(arr.length-1) ? 0 : i+1 ;
 };
 
+let getLatlngWS = (latlng)=>{
+
+	var lat = latlng.lat();
+	var lng = latlng.lng();
+	var max = _gridNow['max'];
+			
+	// when lng is odd, lat + half
+	var d = getDecimal(max);
+	var oe = getOddExt(d,lng);
+	// base west south point
+	var lat0 = parseFloat(floor(lng,d)+('e'+d))%2!=0 ? round(round(lat,d) - max/2,d+oe) : floor(lat,d);
+	var lng0 = floor(lng,d);
+	
+	return getLatlng(lat0,lng0);
+};
+
 c.gridLevelChange = ()=>{
 	var input = document.getElementById('grid_level');
 	var name=input.value, names = [];
@@ -225,18 +241,11 @@ c.click_grid = (e,map,features)=>{
 
 	  var boxs = [];
 	  var lines = [];
-	// from features
-	var pts = [];		
+	// from features		
 	var polylines = features['polylines'];
-	// clear first
-	var clearFirst = ()=>{
-		if(polylines.length > 0){
-			for(var i = 0; i<polylines.length;i++) polylines[i].setMap(null);
-			polylines.length = 0;
-		}
-	};
-
-	clearFirst();
+	// clear lines
+	polylines.map(x=>x.setMap(null));
+	polylines.length = 0;
 	
 	// setting
 	var yellow = {
@@ -245,14 +254,14 @@ c.click_grid = (e,map,features)=>{
 			strokeWeight: 1
 		};
 		
-	var calc = (lat,lng,max,per,boxs,lines,pts,polylines,map,isInfo)=>{
-	// when lng is odd, lat + half
+	var calc = (lat,lng,max,per,boxs,lines,polylines,map,isInfo)=>{
+
 	var d = getDecimal(max);
-	var oe = getOddExt(d,lng);
-	// base west south point
-	var lat0 = parseFloat(floor(lng,d)+('e'+d))%2!=0 ? round(round(lat,d) - max/2,d+oe) : floor(lat,d);
-	var lng0 = floor(lng,d);
-	
+	var oe = getOddExt(d,lng);	
+	var latlng = getLatlng(lat,lng);	
+	var latlngWS = getLatlngWS(latlng);
+	var lat0 = latlngWS.lat();
+	var lng0 = latlngWS.lng();
 	// draw outer box
 	var latlng00 = getLatlng(lat0,lng0);
 	var latlng01 = getLatlng(lat0,round(lng0+max,d));
@@ -272,45 +281,38 @@ c.click_grid = (e,map,features)=>{
 	if(isInfo) document.getElementById('info').innerHTML = info + arr.join(' '); 
 	
 	// calc all small west south point with per
-	var latA=lat0, lats = [lat0];
-	var lngA=lng0, lngs = [lng0];
-	for(var i = 1; i<parseInt(max/per);i++){
-		latA+=per,lngA+=per;	
-		latA=round(latA,d+2);
-		lngA=round(lngA,d+2);
-		lats.push(latA);
-		lngs.push(lngA);
-	}
-	// for lats collect pts
-	for(var i=0; i<lats.length;i++){
-		for(var j=0; j<lngs.length;j++){
-			var latA = lats[i];
-			var lngA = lngs[j];
-			if(j%2!=0){
-				latA = round(lats[i] - per/2,d+2);
-			} 
-			var latlng0 = getLatlng(latA,lngA);
-			pts.push(latlng0);
-		}
-	}	
-	// for pts draw line
-	for(var i=0; i<pts.length;i++){
-		var latlng = pts[i];
-		var latA = latlng.lat(), lngA = latlng.lng();
-		var n = {'sw':latlng
-				,'wn':getLatlng(round(latA+per,d+2),lngA)
-				,'en':getLatlng(round(latA+per,d+2),round(lngA+per,d+2))
-				,'es': getLatlng(latA,round(lngA+per,d+2))
+	// start with west north
+var cols=[], latlngWN = getLatlng(round(lat0+max-per,d+oe),lng0);
+var colsMax = parseInt(max/per), rowsMax = parseInt(max/per);
+		for (var i = 0; i < colsMax; i++) {
+			var row = [];
+			for (j = 0; j < rowsMax; j++) {
+				var lng = latlngWN.lng() + per * j;
+				var lat = latlngWN.lat() - per * i;
+				// when row even shifting half -
+				if (j % 2 != 0) lat = latlngWN.lat() - per * i - per / 2;
+				lat = round(lat,d+2);
+				lng = round(lng,d+2);
+				// wn lat lng to a grid
+				var n = {
+					'sw': [lat, lng]
+					, 'wn': [lat, round(lng + per, d + 2)]
+					, 'en': [round(lat + per, d + 2), round(lng + per, d + 2)]
+					, 'es': [round(lat + per, d + 2), lng]
+				};
+				// convert to latlng
+				var latlngs = [n.sw, n.wn, n.en, n.es, n.sw];
+				latlngs=latlngs.map(x=>getLatlng(x[0],x[1]));
+				drawLine(latlngs,map,polylines,yellow);
+				row[j] = { 'name': lat + ',' + lng, 'latlngs': latlngs };
+				lines.push(row[j]);
 			}
-		var latlngs = [n['sw'],n['wn'],n['en'],n['es'],n['sw']];
-		drawLine(latlngs,map,polylines,yellow);
-		// store all draw
-		lines.push(latlngs);
+			cols[i] = row;
 		}
 
 	};
 
-	calc(lat,lng,max,per,boxs,lines,pts,polylines,map,true);
+	calc(lat,lng,max,per,boxs,lines,polylines,map,true);
 	
 // load kml
 var xmlDoc = getXmlDoc('kml_in');
@@ -332,8 +334,8 @@ box.map((a,i)=>{txts.push(a.lng()+','+a.lat()+',0')});
 for(var i = 0 ; i < lines.length; i++){
 	var line = lines[i];
 	var txts = [];
-	line.map((a,i)=>{txts.push(a.lng()+','+a.lat()+',0')});
-	var name = line[0].lat()+','+line[0].lng();
+	line.latlngs.map((a,i)=>{txts.push(a.lng()+','+a.lat()+',0')});
+	var name = line.name;
 	var placemark = placemarks[0].cloneNode(true);
 	placemark.getElementsByTagName('name')[0].textContent = name;
 	placemark.getElementsByTagName('coordinates')[0].textContent = txts.join(' ');
@@ -350,7 +352,7 @@ putXmlDoc('kml_out',xmlDoc);
 // boxs & lines 
 _kml['click']={'boxs':boxs,'lines':lines};
 
-return {'boxs':boxs,'lines':lines,'pts':pts}
+return {'boxs':boxs,'lines':lines}
 
 };
 
@@ -426,33 +428,11 @@ if(last <= 0){
 
 //clear marker first
 var markers = c.features['markers'];
-if(markers.length > 0){
-			for(var i = 0; i<markers.length;i++) markers[i].setMap(null);
-			markers.length = 0;
-}
+markers.map(x=>x.setMap(null));
+markers.length = 0;
 // draw markers
-var pts=load['pts'];
-for (var i = 0; i < pts.length; i++) drawMarker(pts[i],c.map,markers);
-
-// split markers per 10
-var arr=[];
-for (var i = 0; i < markers.length; i += 10) {
-    var chunk = markers.slice(i, i + 10);
-    arr.push(chunk);
-}
-// per 10 reverse
-var markers=[], arrA = arr.reverse();
-for(var i in arrA) arrA[i].map((a,i)=>{markers.push(a)});
-
-// split lines per 10
-var arr=[], lines=load.lines;
-for (var i = 0; i < lines.length; i += 10) {
-    var chunk = lines.slice(i, i + 10);
-    arr.push(chunk);
-}
-// per 10 reverse
-var lines=[], arrA = arr.reverse();
-for(var i in arrA) arrA[i].map((a,i)=>{lines.push(a)});
+var lines = load['lines'];
+lines.map(x=>drawMarker(x.latlngs[0],c.map,markers));
 
 // markers to map
 _markersMap = {}; 
@@ -460,12 +440,12 @@ for(var i in markers){
 	var marker = markers[i];
 	var line = lines[i];
 	var key = marker.getPosition().lat()+'-'+marker.getPosition().lng();
-	_markersMap[key]={'marker':marker,'name':'','line':line};
+	_markersMap[key]={'marker':marker,'terr':'','line':line.latlngs};
 }
 // fill from gos
 for(var i in gos){
 	var key = gos[i]['south']+'-'+gos[i]['west'];
-	if(_markersMap[key]) _markersMap[key]['name']=gos[i]['name']; // in markers only
+	if(_markersMap[key]) _markersMap[key]['terr']=gos[i]['name']; // in markers only
 }
 
 // on html
@@ -477,10 +457,10 @@ while(fg.children.length > 1){ fg.lastChild.remove(); }
 var markers = [];
 for(var key in _markersMap) markers.push(_markersMap[key]);
 
-// split markers per 10
-var rows =[];
-for (var i = 0; i < markers.length; i += 10) {
-    var chunk = markers.slice(i, i + 10);
+// split markers per divide
+var rows =[], div = parseInt(_gridNow['max']/_gridNow['per']);
+for (var i = 0; i < markers.length; i += div) {
+    var chunk = markers.slice(i, i + div);
 	rows.push(chunk);	
 }
 // process rows & cols
@@ -488,32 +468,32 @@ for(var i=0;i<rows.length;i++){
 	var rowN = row0.cloneNode(true);
 	var cols = rows[i];
 	for(var j=0;j<cols.length;j++){
-		let marker = cols[j]['marker'], btn=rowN.children[j], name=cols[j]['name'];
+		let marker = cols[j]['marker'], btn=rowN.children[j], terr=cols[j]['terr'];
 		// set cols 
-		if(name.length==0){
+		if(terr.length==0){
 			btn.value = ' ';		
 		}else{
-			if(_list1[name]){
-				btn.value = _list1[name][0];
-				btn.classList.add(name);
+			if(_list1[terr]){
+				btn.value = _list1[terr][0];
+				btn.classList.add(terr);
 				// marker
-				marker.setIcon({'url':_list1[name][1],'scaledSize':new google.maps.Size(32,32)});
-				marker.setTitle(name);
+				marker.setIcon({'url':_list1[terr][1],'scaledSize':new google.maps.Size(32,32)});
+				marker.setTitle(terr);
 			}
 		}
 		// marker & btn event
 		let event = ()=>{
-			var name = marker.getTitle();
-			var j = arrNextIndex(_list2,name);
-			var name2 = _list2[j];
-			marker.setTitle(name2);
-			marker.setIcon({'url':_list1[name2][1],'scaledSize':new google.maps.Size(32,32)}); 
+			var terr = marker.getTitle();
+			var j = arrNextIndex(_list2,terr);
+			var terr2 = _list2[j];
+			marker.setTitle(terr2);
+			marker.setIcon({'url':_list1[terr2][1],'scaledSize':new google.maps.Size(32,32)}); 
 			// btn
-			btn.value=_list1[name2][0];
-			if(btn.classList.contains(name)) btn.classList.remove(name);
-			btn.classList.add(name2);
+			btn.value=_list1[terr2][0];
+			if(btn.classList.contains(terr)) btn.classList.remove(terr);
+			btn.classList.add(terr2);
 			// map
-			_markersMap[marker.getPosition().lat()+'-'+marker.getPosition().lng()]['name']=name2;
+			_markersMap[marker.getPosition().lat()+'-'+marker.getPosition().lng()]['terr']=terr2;
 		};
 
 		marker.addListener('click',event); 
@@ -550,8 +530,8 @@ _kml['load']=load;
 	 for (var i = 0; i < lines.length; i++) {
 		 var line = lines[i];
 		 var txts = [];
-		 line.map((a, i) => { txts.push(a.lng() + ',' + a.lat() + ',0') });
-		 var name = line[0].lat() + ',' + line[0].lng();
+		 line.latlngs.map((a, i) => { txts.push(a.lng() + ',' + a.lat() + ',0') });
+		 var name = line.name;
 		 var placemark = placemarks[0].cloneNode(true);
 		 placemark.getElementsByTagName('name')[0].textContent = name;
 		 placemark.getElementsByTagName('coordinates')[0].textContent = txts.join(' ');
@@ -561,7 +541,7 @@ _kml['load']=load;
 	 var go = xmlDoc.getElementsByTagName('GroundOverlay')[0];
 	 var folder = xmlDoc.getElementsByTagName('Folder')[1];
 	 for(var key in _markersMap){	
-		var name = _markersMap[key]['name'];
+		var name = _markersMap[key]['terr'];
 		if(name.length == 0) continue;
 		var line = _markersMap[key]['line'];
 		var goN = go.cloneNode(true);
