@@ -278,18 +278,19 @@ const gM2ll = (en_m) =>{
 const getLLR = (ll,d)=>{
 	return [round(ll[0],d),round(ll[1],d)];
 };
-// chk grid
-if(!_kml['click']['boxs'][0]){alert('no grid'); return false;}
-// from box
-var box = _kml['click']['boxs'][0];
-var lat0 =  box.latlngs[0].lat();
-var lng0 = box.latlngs[0].lng();
 // from assigned
 if(latlngA.lat){
 	var latlngC = getLatlng(latlngA.lat()+_gridNow['max']/2,latlngA.lng()+_gridNow['max']/2)
 	var latlng = getLatlngWS(latlngC);
-	lat0 = latlng.lat();
-	lng0 = latlng.lng();
+	var lat0 = latlng.lat();
+	var lng0 = latlng.lng();
+}else{
+	// chk grid
+	if(!_kml['click']['boxs'][0]){alert('no grid'); return false;}
+	// from box
+	var box = _kml['click']['boxs'][0];
+	var lat0 =  box.latlngs[0].lat();
+	var lng0 = box.latlngs[0].lng();
 } 
 // box down lat, right lng
 var boxDownLat = lat0 - _gridNow['max'];  
