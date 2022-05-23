@@ -119,6 +119,19 @@ const _grid = {
 	'm_100': { 'max': .01, 'per': 0.001, 'name':'100m', 'id':'m_100', 'metre':100 }
 };
 
+const _colorSet = {
+	'grid': {
+		strokeColor: "yellow",
+		strokeOpacity: .8,
+		strokeWeight: 1
+	},
+	'GM': {
+		strokeColor: "red",
+		strokeOpacity: 1,
+		strokeWeight: 1
+	}
+};
+
 const _multiple = 5 ;
 
 let _gridNow = _grid['km_10'];
@@ -233,7 +246,7 @@ c.gridLevelChange = ()=>{
 	_gridNow = _grid[names[j][0]];
 };
 
-c.grid_GM = ()=>{
+c.grid_GM = (latlngA)=>{
 
 const proj4_Defs = ()=>{
 	// ESPG:3857 google map mercator
@@ -267,49 +280,57 @@ const getLLR = (ll,d)=>{
 };
 // chk grid
 if(!_kml['click']['boxs'][0]){alert('no grid'); return false;}
-
+// from box
 var box = _kml['click']['boxs'][0];
-var boxDownLat = box[0].lat() - _gridNow['max'];  
+var lat0 =  box.latlngs[0].lat();
+var lng0 = box.latlngs[0].lng();
+// from assigned
+if(latlngA.lat){
+	var latlngC = getLatlng(latlngA.lat()+_gridNow['max']/2,latlngA.lng()+_gridNow['max']/2)
+	var latlng = getLatlngWS(latlngC);
+	lat0 = latlng.lat();
+	lng0 = latlng.lng();
+} 
+// box down lat, right lng
+var boxDownLat = lat0 - _gridNow['max'];  
+var boxRightLng = lng0 + _gridNow['max'];
 
 proj4_Defs();
 
-var en = ll2GM([box[0].lat(),box[0].lng()]);
-var enDown = ll2GM([boxDownLat,box[0].lng()]);
+var en = ll2GM([lat0,lng0]);
+var enDown = ll2GM([boxDownLat,lng0]);
+var enRight = ll2GM([lat0,boxRightLng]);
 var div = parseInt(_gridNow['max']/_gridNow['per']);
 
 var per = _gridNow['metre'];
 var max = parseInt(div*per);
 var en0 = [parseInt(en[0]/per)*per,parseInt(en[1]/per)*per];
 var enDown0 = [parseInt(enDown[0]/per)*per,parseInt(enDown[1]/per)*per];
-var nDiff = (en0[1]-enDown0[1]-div*per)/per;
+var enRight0 = [parseInt(enRight[0]/per)*per,parseInt(enRight[1]/per)*per];
+
+var cDiff = parseInt((en0[1]-enDown0[1]-div*per)/per);
+var rDiff = parseInt((enRight0[0]-en[0]+per-div*per)/per);
+
 var news = {'ws':en0,'wn':[en0[0],en0[1]+max],'en':[en0[0]+max,en0[1]+max],'es':[en0[0]+max,en0[1]]};
 var boxEN = [news.ws,news.wn,news.en,news.es,news.ws];
-var box = [];
+var box = {'name':news.ws[0]+','+news.ws[1],'latlngs':[]};
+var d = 6;
 boxEN.map(x=>{
 	var ll = gM2ll(x);
-	var llr = getLLR(ll,6);
+	var llr = getLLR(ll,d);
 	var latlng = getLatlng(llr[0],llr[1]);
-	box.push(latlng);
+	box.latlngs.push(latlng);
 	});
 // draw box
-var lineColor1 = {
-			strokeColor: "red",
-			strokeOpacity: .5,
-			strokeWeight: 1
-		};
-		var lineColor2 = {
-			strokeColor: "red",
-			strokeOpacity: 1,
-			strokeWeight: 1
-		};
-drawLine(box,c.map,c.features.polylines,lineColor2);
+drawLine(box.latlngs,c.map,c.features.polylines);
 
 // collect every ws pt starting from west-north
 // even or odd determined by easting
 var od = parseInt(en[0]/per)%2 ? 'odd' : 'even' ;
 
 var cols=[], en1=[news.wn[0],news.wn[1]-per], lines=[];
-var colsMax = div+nDiff, rowsMax = div+1; // if div=10, RowsMax+1, div=20, RowsMax+2...
+var colsMax = div+cDiff, rowsMax = div+rDiff;
+
 for(var i=0; i < colsMax ; i++){
 	var row=[];
 	for(j=0; j < rowsMax ; j++){ 
@@ -326,19 +347,19 @@ for(var i=0; i < colsMax ; i++){
 			};
 		// convert to latlng
 		var ll = gM2ll(n.sw);
-		var llr = getLLR(ll,6);
+		var llr = getLLR(ll,d);
 		n.sw = getLatlng(llr[0],llr[1]);
 		var ll = gM2ll(n.wn);
-		var llr = getLLR(ll,6);
+		var llr = getLLR(ll,d);
 		n.wn = getLatlng(llr[0],llr[1]);
 		var ll = gM2ll(n.en);
-		var llr = getLLR(ll,6);
+		var llr = getLLR(ll,d);
 		n.en = getLatlng(llr[0],llr[1]);
 		var ll = gM2ll(n.es);
-		var llr = getLLR(ll,6);
+		var llr = getLLR(ll,d);
 		n.es = getLatlng(llr[0],llr[1]);
 		var latlngs = [n.sw,n.wn,n.en,n.es,n.sw];
-		drawLine(latlngs,c.map,c.features.polylines,lineColor1);
+		drawLine(latlngs,c.map,c.features.polylines,_colorSet.GM);
 		
 		row[j]={'name':x+','+y,'latlngs':latlngs};
 		lines.push(row[j]);
@@ -352,13 +373,13 @@ var xmlDoc = getXmlDoc('kml_in');
 var placemarks = xmlDoc.getElementsByTagName('Placemark');
 var polygons = xmlDoc.getElementsByTagName('Polygon');
 // kml name
-var name = boxEN[0][0]+','+boxEN[0][1];
+var name = box.name;
 var names = xmlDoc.getElementsByTagName('name');
 names[0].textContent = 'san2-'+name;
 names[names.length-1].textContent = name;
 // polygon value
 var txts = [];
-box.map((a,i)=>{txts.push(a.lng()+','+a.lat()+',0')});
+box.latlngs.map((a,i)=>{txts.push(a.lng()+','+a.lat()+',0')});
 	// coordinate
 	polygons[0].getElementsByTagName('coordinates')[0].textContent = txts.join(' ');
 // line
@@ -380,30 +401,107 @@ x.parentNode.removeChild(x);
 
 putXmlDoc('kml_out',xmlDoc);
 
-// first edit
+return {'boxs':[box],'lines':lines,'cols':cols};
+};
+
+c.load_GM = ()=>{
+
+ // process xml
+ var xmlDoc = getXmlDoc('data');
+
+var gos=[], groundOverlays = xmlDoc.getElementsByTagName('GroundOverlay');
+//var mx = _multiple;
+//var d = getDecimal(_gridNow['max'])+1;
+var d = 6; // .1 metre
+// round
+for(var i=0, total=groundOverlays.length; i < total;i++){
+	var go = groundOverlays[i];
+	var southStr = go.getElementsByTagName('south')[0].textContent;
+	var westStr = go.getElementsByTagName('west')[0].textContent;
+	var northStr = go.getElementsByTagName('north')[0].textContent;
+	var eastStr = go.getElementsByTagName('east')[0].textContent;
+	var name = go.getElementsByTagName('name')[0].textContent;
+	var south = round(parseFloat(southStr),d);
+	var west = round(parseFloat(westStr),d);
+	var north = round(parseFloat(northStr),d);
+	var east = round(parseFloat(eastStr),d);
+	var obj = {'south': south,
+				'west': west,
+				'north': north,
+				'east': east,
+				'name': name,
+				'go': go	
+			};
+	gos[i] = obj;
+	// rewrite round value
+	go.getElementsByTagName('south')[0].textContent = south;
+	go.getElementsByTagName('west')[0].textContent = west;
+	go.getElementsByTagName('north')[0].textContent = north;
+	go.getElementsByTagName('east')[0].textContent = east;		
+	} 
+
+// sort 
+var ascendWest = (a,b)=>{return a['west']-b['west']}; // 小到大
+var descendSouth = (a,b)=>{return b['south']-a['south']}; // 大到小
+
+gos.sort(ascendWest);
+gos.sort(descendSouth);
+
+// append to folder named features
+var txt='feature', featuresFolder = undefined, folders = xmlDoc.getElementsByTagName('Folder');
+for(var i=0;i<folders.length;i++){
+	if(folders[i].children[0].textContent == txt) featuresFolder = folders[i];
+}
+if(featuresFolder == undefined) featuresFolder = xmlDoc.getElementsByTagName('Document')[1];
+for(var i=0, total=gos.length; i < total;i++) featuresFolder.appendChild(gos[i]['go']); 
+
+putXmlDoc('data',xmlDoc);
+
+// call click_grid
+var load = {};
+
+	var polygon = xmlDoc.getElementsByTagName('Polygon')[0];
+	var coor = polygon.getElementsByTagName('coordinates')[0];
+	var arr = coor.textContent.split(' ')[0].split(',');
+	var e = {'latLng': getLatlng(arr[1],arr[0]) };
+	load = c.grid_GM(e.latLng);
+	
+// fit bound with grid
+	var boxs = load['boxs'], bounds = new google.maps.LatLngBounds();
+	bounds.extend(boxs[0].latlngs[0]);
+	bounds.extend(boxs[0].latlngs[2]);
+	c.map.fitBounds(bounds);
+
 //clear marker first
 var markers = c.features['markers'];
-if(markers.length > 0){
-			for(var i = 0; i<markers.length;i++) markers[i].setMap(null);
-			markers.length = 0;
-}
+markers.map(x=>x.setMap(null));
+markers.length = 0;
 // draw markers
-lines.map(x=>{
-	var latlng = x.latlngs[0];
-	drawMarker(latlng,c.map,markers);
-});
+var lines = load['lines'];
+lines.map(x=>drawMarker(x.latlngs[0],c.map,markers));
 
 // markers to map
 _markersMap = {}; 
 for(var i in markers){
 	var marker = markers[i];
 	var line = lines[i];
-	//var key = line.name;
-	var key = marker.getPosition().lat()+'-'+marker.getPosition().lng(); // compromised
-	_markersMap[key]={'name':'','marker':marker,'terr':'','line':line.latlngs};
+	var key = marker.getPosition().lat()+'-'+marker.getPosition().lng();
+	_markersMap[key]={'marker':marker,'terr':'','line':line.latlngs};
+	marker.setTitle('');
 }
+// fill from gos
+for(var i in gos){
+	var key = gos[i]['south']+'-'+gos[i]['west'];
+	var terr = gos[i]['name'];
+	var obj = _markersMap[key];
+	if(obj){
+		obj['marker'].setTitle(terr);
+		obj['terr']=terr; // in markers only
+	} 
+}
+
 // markers to cols
-var i=0;
+var i=0, cols=load.cols;
 cols.map(x=>{
 	x.map(y=>{
 		y.marker = markers[i];
@@ -423,10 +521,11 @@ for(var i=0;i<cols.length;i++){
 	var rows = cols[i];
 	for(var j=0;j<rows.length;j++){
 		var line = rows[j];
-		let marker = line.marker, btn=cN.children[j], terr='';
+		let marker = line.marker, btn=cN.children[j];
+		let terr = marker.getTitle();
 		// new btn
 		if(!btn){
-			var input = cN.children[0].cloneNode(true);
+			var input = c0.children[0].cloneNode(true);
 			// even odd
 			if(j%2!=0) input.classList.add('even');
 			cN.appendChild(input);
@@ -436,14 +535,13 @@ for(var i=0;i<cols.length;i++){
 		if(terr.length==0){
 			btn.value = ' ';		
 		}else{
-			// if(_list1[terr]){
-			// 	btn.value = _list1[terr][0];
-			// 	btn.classList.add(terr);
-			// 	// marker
-			// 	marker.setIcon({'url':_list1[terr][1],'scaledSize':new google.maps.Size(32,32)});
-			// 	marker.setTitle(terr);
+			if(_list1[terr]){
+				btn.value = _list1[terr][0];
+				btn.classList.add(terr);
+				// marker
+				marker.setIcon({'url':_list1[terr][1],'scaledSize':new google.maps.Size(32,32)});
 			}
-		
+		} 
 		// marker & btn event
 		let event = ()=>{
 			var terr = marker.getTitle();
@@ -456,10 +554,9 @@ for(var i=0;i<cols.length;i++){
 			if(btn.classList.contains(terr)) btn.classList.remove(terr);
 			btn.classList.add(terr2);
 			// map
-			var key = marker.getPosition().lat()+'-'+marker.getPosition().lng(); // compromised
+			var key = marker.getPosition().lat()+'-'+marker.getPosition().lng();
 			_markersMap[key]['terr']=terr2;
-			_markersMap[key]['name']=terr2; // compromised
-		};
+			};
 
 		marker.addListener('click',event); 
 		btn.addEventListener('click',event);
@@ -467,11 +564,8 @@ for(var i=0;i<cols.length;i++){
 	fg.appendChild(cN);
 } // for i	
 
-var arr = [];
-lines.map(x=>{
-	arr.push(x.latlngs); // compromised
-});
-_kml['load']={'boxs':[box],'lines':arr};
+_kml['load']=load;
+
 };
 
 c.click_grid = (e,map,features)=>{
@@ -488,13 +582,6 @@ c.click_grid = (e,map,features)=>{
 	// clear lines
 	polylines.map(x=>x.setMap(null));
 			polylines.length = 0;
-
-	// setting
-	var yellow = {
-			strokeColor: "#FFFF00",
-			strokeOpacity: 1,//.5,
-			strokeWeight: 1
-		};
 		
 	var calc = (lat,lng,max,per,boxs,lines,polylines,map,isInfo)=>{
 
@@ -509,9 +596,9 @@ c.click_grid = (e,map,features)=>{
 	var latlng01 = getLatlng(lat0,round(lng0+max,d));
 	var latlng11 = getLatlng(round(lat0+max,d+oe),round(lng0+max,d));
  	var latlng10 = getLatlng(round(lat0+max,d+oe),lng0);
-	var box = [latlng00,latlng01,latlng11,latlng10,latlng00];
+	var box = {'name':lat0+','+lng0,'latlngs':[latlng00,latlng01,latlng11,latlng10,latlng00]};
 	boxs.push(box);
-	drawLine(box,map,polylines);
+	drawLine(box.latlngs,map,polylines);
 	
 	// info
 	var info = round(lat,6)+','+round(lng,6) + "<br/>";
@@ -524,7 +611,7 @@ c.click_grid = (e,map,features)=>{
 	
 	// calc all small west south point with per
 	// start with west north
-var cols=[], latlngWN = getLatlng(round(lat0+max-per,d+oe),lng0);
+var cols=[], latlngWN = getLatlng(round(lat0+max-per,d+oe+1),lng0);
 var colsMax = parseInt(max/per), rowsMax = parseInt(max/per);
 		for (var i = 0; i < colsMax; i++) {
 			var row = [];
@@ -545,7 +632,7 @@ var colsMax = parseInt(max/per), rowsMax = parseInt(max/per);
 				// convert to latlng
 				var latlngs = [n.sw, n.wn, n.en, n.es, n.sw];
 				latlngs=latlngs.map(x=>getLatlng(x[0],x[1]));
-				drawLine(latlngs,map,polylines,yellow);
+				drawLine(latlngs,map,polylines,_colorSet.grid);
 				row[j] = { 'name': lat + ',' + lng, 'latlngs': latlngs };
 				lines.push(row[j]);
 	}
@@ -563,13 +650,13 @@ var placemarks = xmlDoc.getElementsByTagName('Placemark');
 var polygons = xmlDoc.getElementsByTagName('Polygon');
 // kml name
 var box = boxs[0];
-var name = box[0].lat()+','+box[0].lng();
+var name = box.name;
 var names = xmlDoc.getElementsByTagName('name');
 names[0].textContent = 'san2-'+name;
 names[names.length-1].textContent = name;
 // polygon value
 var txts = [];
-box.map((a,i)=>{txts.push(a.lng()+','+a.lat()+',0')});
+box.latlngs.map((a,i)=>{txts.push(a.lng()+','+a.lat()+',0')});
 	// coordinate
 	polygons[0].getElementsByTagName('coordinates')[0].textContent = txts.join(' ');
 // line
@@ -640,11 +727,11 @@ gos.sort(ascendWest);
 gos.sort(descendSouth);
 
 // append to folder named features
-var txt='features', featuresFolder = undefined, folders = xmlDoc.getElementsByTagName('Folder');
+var txt='feature', featuresFolder = undefined, folders = xmlDoc.getElementsByTagName('Folder');
 for(var i=0;i<folders.length;i++){
 	if(folders[i].children[0].textContent == txt) featuresFolder = folders[i];
 }
-if(featuresFolder == undefined) featuresFolder = xmlDoc.getElementsByTagName('Document')[0];
+if(featuresFolder == undefined) featuresFolder = xmlDoc.getElementsByTagName('Document')[1];
 for(var i=0, total=gos.length; i < total;i++) featuresFolder.appendChild(gos[i]['go']); 
 
 putXmlDoc('data',xmlDoc);
@@ -664,8 +751,8 @@ if(last <= 0){
 } 
 // fit bound with grid
 	var boxs = load['boxs'], bounds = new google.maps.LatLngBounds();
-	bounds.extend(boxs[0][0]);
-	bounds.extend(boxs[0][2]);
+	bounds.extend(boxs[0].latlngs[0]);
+	bounds.extend(boxs[0].latlngs[2]);
 	c.map.fitBounds(bounds);
 
 //clear marker first
@@ -683,11 +770,17 @@ for(var i in markers){
 	var line = lines[i];
 	var key = marker.getPosition().lat()+'-'+marker.getPosition().lng();
 	_markersMap[key]={'marker':marker,'terr':'','line':line.latlngs};
+	marker.setTitle('');
 }
 // fill from gos
 for(var i in gos){
 	var key = gos[i]['south']+'-'+gos[i]['west'];
-	if(_markersMap[key]) _markersMap[key]['terr']=gos[i]['name']; // in markers only
+	var terr = gos[i]['name'];
+	var obj = _markersMap[key]; 
+	if(obj){
+		obj['terr']=terr; 
+		obj['marker'].setTitle(terr);
+	} 
 }
 
 // on html
@@ -695,9 +788,6 @@ var fg = document.getElementById('feature_grid');
 var row0 = fg.children[0];
 // clean before append
 while(fg.children.length > 1){ fg.lastChild.remove(); }
-
-var markers = [];
-for(var key in _markersMap) markers.push(_markersMap[key]);
 
 // split markers per divide
 var rows =[], div = parseInt(_gridNow['max']/_gridNow['per']);
@@ -710,7 +800,8 @@ for(var i=0;i<rows.length;i++){
 	var rowN = row0.cloneNode(true);
 	var cols = rows[i];
 	for(var j=0;j<cols.length;j++){
-		let marker = cols[j]['marker'], btn=rowN.children[j], terr=cols[j]['terr'];
+		let marker = cols[j], btn=rowN.children[j];
+		let terr=marker.getTitle();
 		// set cols 
 		if(terr.length==0){
 			btn.value = ' ';		
@@ -759,13 +850,13 @@ _kml['load']=load;
 	 var placemarks = xmlDoc.getElementsByTagName('Placemark');
 	 var polygons = xmlDoc.getElementsByTagName('Polygon');
 	 // kml name : polygon coor
-	 var name = box[0].lat() + ',' + box[0].lng();
+	 var name = box.name;
 	 var names = xmlDoc.getElementsByTagName('name');
 	 names[0].textContent = 'san2-' + name;
 	 names[names.length - 1].textContent = name;
 	 // polygon value
 	 var txts = [];
-	 box.map((a, i) => { txts.push(a.lng() + ',' + a.lat() + ',0') });
+	 box.latlngs.map((a, i) => { txts.push(a.lng() + ',' + a.lat() + ',0') });
 	 // coordinate
 	 polygons[0].getElementsByTagName('coordinates')[0].textContent = txts.join(' ');
 	 // line
@@ -783,9 +874,10 @@ _kml['load']=load;
 	 var go = xmlDoc.getElementsByTagName('GroundOverlay')[0];
 	 var folder = xmlDoc.getElementsByTagName('Folder')[1];
 	 for(var key in _markersMap){	
-		var name = _markersMap[key]['terr'];
+		var obj = _markersMap[key];
+		var name = obj['terr'];
 		if(name.length == 0) continue;
-		var line = _markersMap[key]['line'];
+		var line = obj['line'];
 		var goN = go.cloneNode(true);
 		goN.getElementsByTagName('south')[0].textContent = line[0].lat();
 		goN.getElementsByTagName('west')[0].textContent = line[0].lng();
@@ -1006,6 +1098,7 @@ function startMap() {
 							<h1>kml load (round & sort)</h1>
 							<textarea id="data"></textarea>
 							<button id="data_sort" >load</button>
+							<button id="load_GM" >load GM</button>
 						</span>
 						<!--
 							<img class="lat" src="./pic/22-120-10.png"/>
@@ -1056,6 +1149,9 @@ function startMap() {
 
 	var grid_GM = latlng_map_tile.grid_GM;
 	document.getElementById('grid_GM').addEventListener('click',grid_GM);
+
+	var load_GM = latlng_map_tile.load_GM;
+	document.getElementById('load_GM').addEventListener('click',load_GM);
 
 })();
 
