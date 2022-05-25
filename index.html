@@ -136,6 +136,8 @@ const _multiple = 5 ;
 
 let _gridNow = _grid['km_10'];
 
+let _isGM = false;
+
 let _markersMap = {};
 
 let _kml = {
@@ -236,6 +238,16 @@ let getLatlngWS = (latlng)=>{
 	return getLatlng(lat0,lng0);
 };
 
+let getENWS = (en)=>{
+	var e = en[0], n = en[1];
+	var per = _gridNow['per'];	
+	var div = parseInt(_gridNow['max']/per);
+	var max = _gridNow['metre'] * div;
+	var e0 = parseInt(e/max)*max;
+	var n0 = parseInt(e/max)%2==0 ? parseInt((n-max/2)/max)*max+max/2 : parseInt(n/max)*max ;
+	return [e0,n0];
+};
+
 c.gridLevelChange = ()=>{
 	var input = document.getElementById('grid_level');
 	var name=input.value, names = [];
@@ -244,6 +256,17 @@ c.gridLevelChange = ()=>{
 	input.value = names[j][1];
 	
 	_gridNow = _grid[names[j][0]];
+};
+
+c.isGM = (e)=>{
+	var btn = e.target;
+	if(_isGM){ 
+		_isGM = false;
+		btn.style='background:initial';
+	}else{
+		_isGM = true;
+		btn.style='background:yellow';
+	} 
 };
 
 c.grid_GM = (latlngA)=>{
@@ -292,6 +315,10 @@ if(latlngA.lat){
 	var lat0 =  box.latlngs[0].lat();
 	var lng0 = box.latlngs[0].lng();
 } 
+
+//var lat0 = latLngA.lat();
+//var lng0 = latLngA.lng();	
+
 // box down lat, right lng
 var boxDownLat = lat0 - _gridNow['max'];  
 var boxRightLng = lng0 + _gridNow['max'];
@@ -309,8 +336,14 @@ var en0 = [parseInt(en[0]/per)*per,parseInt(en[1]/per)*per];
 var enDown0 = [parseInt(enDown[0]/per)*per,parseInt(enDown[1]/per)*per];
 var enRight0 = [parseInt(enRight[0]/per)*per,parseInt(enRight[1]/per)*per];
 
+//var en0 = getENWS(en);
+
 var cDiff = parseInt((en0[1]-enDown0[1]-div*per)/per);
-var rDiff = parseInt((enRight0[0]-en[0]+per-div*per)/per);
+//var rDiff = parseInt((enRight0[0]-en0[0]+per-div*per)/per);
+var rDiff = parseInt((enRight0[0]-en0[0]-div*per)/per); // bug fix? (en->en0)
+
+//cDiff = 0;
+//rDiff = 0;
 
 var news = {'ws':en0,'wn':[en0[0],en0[1]+max],'en':[en0[0]+max,en0[1]+max],'es':[en0[0]+max,en0[1]]};
 var boxEN = [news.ws,news.wn,news.en,news.es,news.ws];
@@ -322,6 +355,10 @@ boxEN.map(x=>{
 	var latlng = getLatlng(llr[0],llr[1]);
 	box.latlngs.push(latlng);
 	});
+
+// clear lines
+//c.features.polylines.map(x=>x.setMap(null));
+//c.features.polylines.length = 0;	
 // draw box
 drawLine(box.latlngs,c.map,c.features.polylines);
 
@@ -339,7 +376,7 @@ for(var i=0; i < colsMax ; i++){
 		var y = en1[1]-per*i;
 		// when row even shifting half -
 		if(j%2!=0) y = en1[1]-per*i - per/2;
-		if(od=='odd') y+=per/2;
+		if(od=='odd') y+=per/2; // only about cDiff & rDiff base on latlng grid 
 		// wn xy to grid
 		var n = {'sw':[x,y]
 				,'wn':[x,y+per]
@@ -571,6 +608,8 @@ _kml['load']=load;
 
 c.click_grid = (e,map,features)=>{
 
+if(_isGM){ c.grid_GM(e.latLng);return false;}
+
       var lat = e.latLng.lat() ; 
       var lng = e.latLng.lng() ;
 	  var max = _gridNow['max'];
@@ -581,8 +620,8 @@ c.click_grid = (e,map,features)=>{
 	// from features
 	var polylines = features['polylines'];
 	// clear lines
-	polylines.map(x=>x.setMap(null));
-			polylines.length = 0;
+	//polylines.map(x=>x.setMap(null));
+	//		polylines.length = 0;
 		
 	var calc = (lat,lng,max,per,boxs,lines,polylines,map,isInfo)=>{
 
@@ -687,6 +726,8 @@ return {'boxs':boxs,'lines':lines}
 };
 
 c.data_sort = ()=>{
+
+if(_isGM){c.load_GM();return false;}
   // process xml
 var xmlDoc = getXmlDoc('data');
 
@@ -1072,6 +1113,7 @@ function startMap() {
 								<h1>kml grid
 									<input type="button" id="grid_level" value="10 km"/>
 									<input type="button" id="grid_GM" value="GM"/>
+									<input type="button" id="isGM" value="isGM"/>
 									</h1>	
 								<textarea id="kml_out"></textarea>
 								<button id="kml_copy">copy</button>
@@ -1153,6 +1195,8 @@ function startMap() {
 
 	var load_GM = latlng_map_tile.load_GM;
 	document.getElementById('load_GM').addEventListener('click',load_GM);
+
+	document.getElementById('isGM').addEventListener('click',latlng_map_tile.isGM);
 
 })();
 
