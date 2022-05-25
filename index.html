@@ -269,7 +269,7 @@ c.isGM = (e)=>{
 	} 
 };
 
-c.grid_GM = (latlngA)=>{
+c.grid_GM_latlng = (latlngA)=>{
 
 const proj4_Defs = ()=>{
 	// ESPG:3857 google map mercator
@@ -309,7 +309,7 @@ if(latlngA.lat){
 	var lng0 = latlng.lng();
 }else{
 	// chk grid
-	if(!_kml['click']['boxs'][0]){alert('no grid'); return false;}
+	if(!_kml['click']['boxs'][0]){alert('no latlng grid'); return false;}
 	// from box
 	var box = _kml['click']['boxs'][0];
 	var lat0 =  box.latlngs[0].lat();
@@ -339,8 +339,7 @@ var enRight0 = [parseInt(enRight[0]/per)*per,parseInt(enRight[1]/per)*per];
 //var en0 = getENWS(en);
 
 var cDiff = parseInt((en0[1]-enDown0[1]-div*per)/per);
-//var rDiff = parseInt((enRight0[0]-en0[0]+per-div*per)/per);
-var rDiff = parseInt((enRight0[0]-en0[0]-div*per)/per); // bug fix? (en->en0)
+var rDiff = parseInt((enRight0[0]-en0[0]-div*per)/per);
 
 //cDiff = 0;
 //rDiff = 0;
@@ -499,10 +498,11 @@ putXmlDoc('data',xmlDoc);
 var load = {};
 
 	var polygon = xmlDoc.getElementsByTagName('Polygon')[0];
+	if(!polygon){alert('no polygon');return false;}
 	var coor = polygon.getElementsByTagName('coordinates')[0];
 	var arr = coor.textContent.split(' ')[0].split(',');
 	var e = {'latLng': getLatlng(arr[1],arr[0]) };
-	load = c.grid_GM(e.latLng);
+	load = c.grid_GM_latlng(e.latLng);
 	
 // fit bound with grid
 	var boxs = load['boxs'], bounds = new google.maps.LatLngBounds();
@@ -783,7 +783,9 @@ var last = gos.length-1;
 var load = {};
 
 if(last <= 0){
-	var arr = xmlDoc.getElementsByTagName('Placemark')[0].textContent.split('#')[0].split(',');
+	var placemark = xmlDoc.getElementsByTagName('Placemark')[0];
+	if(!placemark){alert('no placemark');return false;}
+	var arr = placemark.textContent.split('#')[0].split(',');
 	var e = {'latLng': getLatlng(arr[0],arr[1]) };
 	load = c.click_grid(e,c.map,c.features);
 	
@@ -1112,7 +1114,7 @@ function startMap() {
 							<span>
 								<h1>kml grid
 									<input type="button" id="grid_level" value="10 km"/>
-									<input type="button" id="grid_GM" value="GM"/>
+									<input type="button" id="grid_GM_latlng" value="latlngGM"/>
 									<input type="button" id="isGM" value="isGM"/>
 									</h1>	
 								<textarea id="kml_out"></textarea>
@@ -1190,8 +1192,7 @@ function startMap() {
 	var gridLevelChange = latlng_map_tile.gridLevelChange;
 	document.getElementById('grid_level').addEventListener('click',gridLevelChange);
 
-	var grid_GM = latlng_map_tile.grid_GM;
-	document.getElementById('grid_GM').addEventListener('click',grid_GM);
+	document.getElementById('grid_GM_latlng').addEventListener('click',latlng_map_tile.grid_GM_latlng);
 
 	var load_GM = latlng_map_tile.load_GM;
 	document.getElementById('load_GM').addEventListener('click',load_GM);
