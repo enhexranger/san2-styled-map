@@ -337,6 +337,31 @@ putXmlDoc('kml_out',xmlDoc);
 
 };
 
+let gridInfo = (x,y,o)=>{
+
+	var infoElem = document.getElementById('info'); 
+	
+	var exec = {
+		'latlng':()=>{
+			var lat0 = x, lng0 = y, per=_gridNow.per;
+			var info = 'WestSouth: ' + round(lat0, 6) + ',' + round(lng0, 6) + "<br/>";
+			var arr = ['KML Box coor: ', [lng0, lat0, 0],
+				[lng0, lat0+per, 0],
+				[lng0+per, lat0+per, 0],
+				[lng0+per, lat0, 0],
+				[lng0, lat0, 0]];
+			infoElem.innerHTML = info + arr.join(' ');
+		},
+		'en':()=>{
+			var e0 = x, n0 = y;
+			var info = 'WestSouth Easting,Northing: ' + round(e0, 0) + ',' + round(n0, 0) + "<br/>";
+			infoElem.innerHTML = info ;
+		}
+	};
+
+	exec[o]();
+};
+
 c.grid_GM_latlng = (latlngA)=>{
 
 // from assigned
@@ -385,6 +410,9 @@ boxEN.map(x=>{
 	var latlng = getLatlng(llr[0],llr[1]);
 	box.latlngs.push(latlng);
 	});
+
+// grid info
+gridInfo(en0[0],en0[1],'en');
 
 // draw box
 drawLine(box.latlngs,c.map,c.features.polylines);
@@ -466,7 +494,8 @@ boxEN.map(x=>{
 // clear lines
 c.features.polylines.map(x=>x.setMap(null));
 c.features.polylines.length = 0;	
-
+// info
+gridInfo(en0[0],en0[1],'en');
 // draw box
 drawLine(box.latlngs,c.map,c.features.polylines);
 
@@ -721,14 +750,7 @@ if(_isGM){ c.grid_GM(e);return false;}
 	drawLine(box.latlngs,map,polylines);
 	
 	// info
-	var info = round(lat,6)+','+round(lng,6) + "<br/>";
-	var arr = [[lng0,lat0,0],
-	[lng0,latlng10.lat(),0],
-	[latlng11.lng(),latlng11.lat(),0],
-	[latlng01.lng(),lat0,0],
-	[lng0,lat0,0]];
-	if(isInfo) document.getElementById('info').innerHTML = info + arr.join(' '); 
-	
+	gridInfo(lat0,lng0,'latlng');
 	// calc all small west south point with per
 	// start with west north
 var cols=[], latlngWN = getLatlng(round(lat0+max-per,d+oe+1),lng0);
