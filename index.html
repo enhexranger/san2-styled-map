@@ -40,6 +40,10 @@ img.lat {
 	  background-color: antiquewhite;
   }
 
+input.active {
+	background-color: yellow;
+}  
+
 input.fr {
 	width: 30px;
 	background-repeat: no-repeat;
@@ -138,6 +142,8 @@ let _gridNow = _grid['km_10'];
 
 let _isGM = false;
 
+let _isOD = true; // Odd Diff
+ 
 let _markersMap = {};
 
 let _kml = {
@@ -233,6 +239,8 @@ let getLatlngWS = (latlng)=>{
 	var oe = getOddExt(d,lng);
 	// base west south point
 	var lat0 = parseFloat(floor(lng,d)+('e'+d))%2!=0 ? round(round(lat,d) - max/2,d+oe) : floor(lat,d);
+	// !_isOD override
+	if(!_isOD) lat0 = floor(lat,d);
 	var lng0 = floor(lng,d);
 	
 	return getLatlng(lat0,lng0);
@@ -245,6 +253,8 @@ let getENWS = (en)=>{
 	var max = _gridNow['metre'] * div;
 	var e0 = parseInt(e/max)*max;
 	var n0 = parseInt(e/max)%2==0 ? parseInt((n-max/2)/max)*max+max/2 : parseInt(n/max)*max ;
+	// !_isOD override
+	if(!_isOD) n0 = parseInt(n/max)*max;
 	return [e0,n0];
 };
 
@@ -256,6 +266,36 @@ c.gridLevelChange = ()=>{
 	input.value = names[j][1];
 	
 	_gridNow = _grid[names[j][0]];
+};
+
+c.isOD = (e)=>{
+	// toggle class
+	var btn = e.target;
+	if(_isOD){
+		_isOD = false;
+		btn.classList.remove('active');
+	}else{
+		_isOD = true;
+		btn.classList.add('active');
+	}
+	// html grid toggle class
+	var fg = document.getElementById('feature_grid');
+	
+	let csP = (arr)=>{
+		for(var i=0;i<arr.length;i++){
+			var r = arr[i];
+			var cl = r.classList;
+			if(_isOD == false && cl[1]) cl.remove('even');
+			if(i%2==1 && _isOD == true) cl.add('even');
+		}
+	};
+	
+	for(var i=0; i<fg.children.length;i++){
+		var row = fg.children[i];
+		var cs = row.children;
+		csP(cs);
+	}
+	
 };
 
 c.isGM = (e)=>{
@@ -431,6 +471,8 @@ for(var i=0; i < colsMax ; i++){
 		var y = en1[1]-per*i;
 		// when row even shifting half -
 		if(j%2!=0) y = en1[1]-per*i - per/2;
+		// !isOD revert
+		if(!_isOD) y = en1[1]-per*i;
 		if(od=='odd') y+=per/2; // only about cDiff & rDiff base on latlng grid 
 		// wn xy to grid
 		var n = {'sw':[x,y]
@@ -511,6 +553,8 @@ for(var i=0; i < colsMax ; i++){
 		var y = en1[1]-per*i;
 		// when row even shifting half -
 		if(j%2!=0) y = en1[1]-per*i - per/2;
+		// !_isOD revert
+		if(!_isOD) y = en1[1]-per*i;
 		// wn xy to grid
 		var n = {'sw':[x,y]
 				,'wn':[x,y+per]
@@ -673,6 +717,8 @@ for(var i=0;i<cols.length;i++){
 			var input = c0.children[0].cloneNode(true);
 			// even odd
 			if(j%2!=0) input.classList.add('even');
+			// !_isOD revert
+			if(!_isOD) input.classList.remove('even');
 			cN.appendChild(input);
 			btn=cN.children[j];
 		}
@@ -762,6 +808,8 @@ var colsMax = parseInt(max/per), rowsMax = parseInt(max/per);
 				var lat = latlngWN.lat() - per * i;
 				// when row even shifting half -
 				if (j % 2 != 0) lat = latlngWN.lat() - per * i - per / 2;
+				// !_isOD revert
+				if(!_isOD) lat = lat = latlngWN.lat() - per * i;
 				lat = round(lat,d+2);
 				lng = round(lng,d+2);
 				// wn lat lng to a grid
@@ -1215,6 +1263,7 @@ function startMap() {
 							</span>
 							<span>
 								<h1>kml grid
+									<input type="button" id="isOD" class="active" value="OD"/>
 									<input type="button" id="grid_level" value="10 km"/>
 									<input type="button" id="isGM" value="isGM"/>
 									<input type="button" id="grid_GM_latlng" value="latlng-GM"/>
@@ -1301,6 +1350,8 @@ function startMap() {
 	});
 
 	document.getElementById('isGM').addEventListener('click',latlng_map_tile.isGM);
+
+	document.getElementById('isOD').addEventListener('click',latlng_map_tile.isOD);
 
 })();
 
