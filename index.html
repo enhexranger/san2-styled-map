@@ -40,6 +40,10 @@ img.lat {
 	  background-color: antiquewhite;
   }
 
+input.active {
+	background-color: yellow;
+}  
+
 input.fr {
 	width: 30px;
 	background-repeat: no-repeat;
@@ -49,6 +53,44 @@ input.fr {
 input.fr.even {
 	position: relative;
 	top: 11px;
+}
+
+input.fileCount {
+	width: 25px;
+}
+button#fileToggle.ON {
+	background-color: yellow;
+}
+a.fileBoxA {
+	position: relative;
+	left: -25px;
+	top: 14px;
+}
+
+div#fileBox {
+	border: 1px solid black;
+	position: absolute;
+	top:-2px;
+	left:30px;
+    z-index: 1;
+	min-height: 24px;
+	min-width: 170px;
+	background-color: aliceblue;
+}
+
+div.file {
+	width: max-content;
+	position: relative;
+    top: 7px;
+	padding: 3px;
+	margin: -8px 0px 7px 0px;
+	font-size: small;
+}
+div.file.zero {
+	display: none;
+}
+div.file.current {
+	background-color:yellow;
 }
 
 input.fr.mountain {
@@ -138,6 +180,8 @@ let _gridNow = _grid['km_10'];
 
 let _isGM = false;
 
+let _isOD = true; // Odd Diff
+ 
 let _markersMap = {};
 
 let _kml = {
@@ -233,6 +277,8 @@ let getLatlngWS = (latlng)=>{
 	var oe = getOddExt(d,lng);
 	// base west south point
 	var lat0 = parseFloat(floor(lng,d)+('e'+d))%2!=0 ? round(round(lat,d) - max/2,d+oe) : floor(lat,d);
+	// !_isOD override
+	if(!_isOD) lat0 = floor(lat,d);
 	var lng0 = floor(lng,d);
 	
 	return getLatlng(lat0,lng0);
@@ -245,6 +291,8 @@ let getENWS = (en)=>{
 	var max = _gridNow['metre'] * div;
 	var e0 = parseInt(e/max)*max;
 	var n0 = parseInt(e/max)%2==0 ? parseInt((n-max/2)/max)*max+max/2 : parseInt(n/max)*max ;
+	// !_isOD override
+	if(!_isOD) n0 = parseInt(n/max)*max;
 	return [e0,n0];
 };
 
@@ -256,6 +304,36 @@ c.gridLevelChange = ()=>{
 	input.value = names[j][1];
 	
 	_gridNow = _grid[names[j][0]];
+};
+
+c.isOD = (e)=>{
+	// toggle class
+	var btn = e.target;
+	if(_isOD){
+		_isOD = false;
+		btn.classList.remove('active');
+	}else{
+		_isOD = true;
+		btn.classList.add('active');
+	}
+	// html grid toggle class
+	var fg = document.getElementById('feature_grid');
+	
+	let csP = (arr)=>{
+		for(var i=0;i<arr.length;i++){
+			var r = arr[i];
+			var cl = r.classList;
+			if(_isOD == false && cl[1]) cl.remove('even');
+			if(i%2==1 && _isOD == true) cl.add('even');
+		}
+	};
+	
+	for(var i=0; i<fg.children.length;i++){
+		var row = fg.children[i];
+		var cs = row.children;
+		csP(cs);
+	}
+	
 };
 
 c.isGM = (e)=>{
@@ -362,6 +440,207 @@ let gridInfo = (x,y,o)=>{
 	exec[o]();
 };
 
+let loadFile = (h,ll,grid)=>{
+// call grid
+var hs = h.split(',');
+var lls = ll.split(',');
+var terrNs = grid.split(',').filter(x=>x!='#');
+// list1 inverse query
+var list1r = {};
+for(var k in _list1){list1r[_list1[k][0]]=k}
+
+var n = hs[0];
+
+var e = {'latLng': getLatlng(lls[0],lls[1]) };
+
+var load = (g)=>{
+
+var lines = g['lines'];
+var cols = g['cols'];
+
+// fit bound with grid
+var boxs = g['boxs'], bounds = new google.maps.LatLngBounds();
+	bounds.extend(boxs[0].latlngs[0]);
+	bounds.extend(boxs[0].latlngs[2]);
+	c.map.fitBounds(bounds);
+
+//clear marker first
+var markers = c.features['markers'];
+markers.map(x=>x.setMap(null));
+markers.length = 0;
+// draw markers
+lines.map(x=>drawMarker(x.latlngs[0],c.map,markers));
+
+// markers to map
+_markersMap = {}; 
+for(var i in markers){
+	var marker = markers[i];
+	var line = lines[i];
+	var terrN = terrNs[i];
+	var terr = list1r[terrN];
+	if(terr=='empty') terr = '';
+	var key = marker.getPosition().lat()+'-'+marker.getPosition().lng();
+	_markersMap[key]={'marker':marker,'terr':terr,'line':line.latlngs};
+	marker.setTitle(terr);
+}	
+// on html
+var fg = document.getElementById('feature_grid');
+var c0 = fg.children[0];
+// clean before append
+while(fg.children.length > 1){ fg.lastChild.remove(); }
+
+// marker to cols
+var i=0;
+cols.map(x=>{
+	x.map(y=>{
+		y.marker = markers[i];
+		i++;
+	});
+});
+
+let event = (m,b)=>{
+			var terr = m.getTitle();
+			var j = arrNextIndex(_list2,terr);
+			var terr2 = _list2[j];
+			m.setTitle(terr2);
+			m.setIcon({'url':_list1[terr2][1],'scaledSize':new google.maps.Size(32,32)}); 
+			// btn
+			b.value=_list1[terr2][0];
+			if(b.classList.contains(terr)) b.classList.remove(terr);
+			b.classList.add(terr2);
+			// map
+			var key = m.getPosition().lat()+'-'+m.getPosition().lng();
+			_markersMap[key]['terr']=terr2;
+			};
+
+// process cols & rows
+for(var i=0;i<cols.length;i++){
+	var cN = c0.cloneNode(true);
+	var rows = cols[i];
+	for(var j=0;j<rows.length;j++){
+		var line = rows[j];
+		let marker = line.marker, btn=cN.children[j];
+		// new btn
+		if(!btn){
+			var input = c0.children[0].cloneNode(true);
+			// even odd
+			if(j%2!=0) input.classList.add('even');
+			// !_isOD revert
+			if(!_isOD) input.classList.remove('even');
+			cN.appendChild(input);
+			btn=cN.children[j];
+		}
+		// set cols 
+		var terr = marker.getTitle();
+		
+		if(terr.length==0 || terr=='empty'){
+			btn.value = ' ';		
+		}else{
+			if(_list1[terr]){
+				btn.value = _list1[terr][0];
+				btn.classList.add(terr);
+				// marker
+				marker.setIcon({'url':_list1[terr][1],'scaledSize':new google.maps.Size(32,32)});
+			}
+		} 
+		// marker & btn event
+		marker.addListener('click',()=>{event(marker,btn)}); 
+		btn.addEventListener('click',()=>{event(marker,btn)});
+	} // for j
+	fg.appendChild(cN);
+} // for i	
+
+_kml['load']=g;
+
+c.kml_write();
+
+};
+
+var exec = {
+	'latlng':()=>{
+		var grid = c.click_grid(e);
+		load(grid);
+	},
+	'GM':()=>{
+		var grid = c.grid_GM(e);
+		load(grid);
+	},
+	'GM_latlng':()=>{
+		var grid = c.grid_GM_latlng(e);
+		load(grid);
+	}
+	};
+
+	exec[n](); 
+
+};
+
+let fileMan = (n,e)=>{
+	var exec = {
+		'load':()=>{
+			var fb = document.getElementById('fileBox');
+			// current
+			for(var i=0;i<fb.children.length;i++) fb.children[i].classList.remove('current');
+			e.target.parentNode.classList.add('current');
+			// process data
+			var headStr = e.target.parentNode.children[1].value;
+			var wsllStr = e.target.parentNode.children[2].value;
+			var gridStr = e.target.parentNode.children[3].value;
+			loadFile(headStr,wsllStr,gridStr);
+		},
+		'del':()=>{
+			e.target.parentNode.remove();
+		}
+	};
+	exec[n]();
+};
+
+let addFile = (d)=>{
+	var ft = document.getElementById('fileToggle');
+	var fb = document.getElementById('fileBox');
+	var f0 = fb.children[0];
+	var fn = f0.cloneNode(true);
+	// head
+	fn.children[1].defaultValue=d['id']+','+d['ws'];
+	fn.children[2].defaultValue=d['wsll'];
+	// grid
+	var arr=[], cols = d['cols'];
+	cols.map(x=>{
+		x.map(y=>{
+			if(y.getTitle){
+				var marker = y;
+			}else{
+				var marker = y.marker;
+			}
+			var terr = marker.getTitle();
+			if(terr.length==0) terr = 'empty';
+			var terrN = _list1[terr][0]
+			arr.push(terrN);
+		});
+		arr.push('#');
+	});
+	
+	fn.children[3].defaultValue=arr.join(',');
+	// event
+	fn.children[0].addEventListener('click',(e)=>{
+		fileMan('load',e);
+	});
+
+	fn.children[4].addEventListener('click',(e)=>{
+		fileMan('del',e);
+	});
+	// fileBox force on
+	ft.classList.add('ON');
+	fb.style.display = "block";
+	// find all current
+	for(var i=0;i<fb.children.length;i++) fb.children[i].classList.remove('current');
+	// append
+	fn.classList.remove('zero');
+	fn.classList.add('current');
+	fb.appendChild(fn);
+	
+};
+
 c.grid_GM_latlng = (latlngA)=>{
 
 // from assigned
@@ -426,11 +705,13 @@ var colsMax = div+cDiff, rowsMax = div+rDiff;
 
 for(var i=0; i < colsMax ; i++){
 	var row=[];
-	for(j=0; j < rowsMax ; j++){ 
+	for(var j=0; j < rowsMax ; j++){ 
 		var x = en1[0]+per*j;
 		var y = en1[1]-per*i;
 		// when row even shifting half -
 		if(j%2!=0) y = en1[1]-per*i - per/2;
+		// !isOD revert
+		if(!_isOD) y = en1[1]-per*i;
 		if(od=='odd') y+=per/2; // only about cDiff & rDiff base on latlng grid 
 		// wn xy to grid
 		var n = {'sw':[x,y]
@@ -506,11 +787,13 @@ var colsMax = div, rowsMax = div;
 
 for(var i=0; i < colsMax ; i++){
 	var row=[];
-	for(j=0; j < rowsMax ; j++){ 
+	for(var j=0; j < rowsMax ; j++){ 
 		var x = en1[0]+per*j;
 		var y = en1[1]-per*i;
 		// when row even shifting half -
 		if(j%2!=0) y = en1[1]-per*i - per/2;
+		// !_isOD revert
+		if(!_isOD) y = en1[1]-per*i;
 		// wn xy to grid
 		var n = {'sw':[x,y]
 				,'wn':[x,y+per]
@@ -548,7 +831,7 @@ return {'boxs':[box],'lines':lines,'cols':cols};
 c.load_GM = (x)=>{
 
  // process xml
- var xmlDoc = getXmlDoc('data');
+ var xmlDoc = getXmlDoc('kml_out');
 
 var gos=[], groundOverlays = xmlDoc.getElementsByTagName('GroundOverlay');
 var d = 6; // .1 metre
@@ -594,7 +877,7 @@ for(var i=0;i<folders.length;i++){
 if(featuresFolder == undefined) featuresFolder = xmlDoc.getElementsByTagName('Document')[1];
 for(var i=0, total=gos.length; i < total;i++) featuresFolder.appendChild(gos[i]['go']); 
 
-putXmlDoc('data',xmlDoc);
+putXmlDoc('kml_out',xmlDoc);
 
 // call click_grid
 var load = {};
@@ -673,6 +956,8 @@ for(var i=0;i<cols.length;i++){
 			var input = c0.children[0].cloneNode(true);
 			// even odd
 			if(j%2!=0) input.classList.add('even');
+			// !_isOD revert
+			if(!_isOD) input.classList.remove('even');
 			cN.appendChild(input);
 			btn=cN.children[j];
 		}
@@ -711,6 +996,12 @@ for(var i=0;i<cols.length;i++){
 
 _kml['load']=load;
 
+// add File
+var id = x==1 ? 'GM_latlng' : 'GM';
+var ws =boxs[0].name, ll=boxs[0].latlngs[0];
+var wsll = ll.lat()+','+ll.lng();
+addFile({'id':id,'ws':ws,'wsll':wsll,'cols':cols});
+
 };
 
 c.click_grid = (e)=>{
@@ -726,6 +1017,7 @@ if(_isGM){ c.grid_GM(e);return false;}
 
 	  var boxs = [];
 	  var lines = [];
+	  var cols = [];
 	// from features
 	var polylines = c.features['polylines'];
 	// clear lines
@@ -753,15 +1045,17 @@ if(_isGM){ c.grid_GM(e);return false;}
 	gridInfo(lat0,lng0,'latlng');
 	// calc all small west south point with per
 	// start with west north
-var cols=[], latlngWN = getLatlng(round(lat0+max-per,d+oe+1),lng0);
+var latlngWN = getLatlng(round(lat0+max-per,d+oe+1),lng0);
 var colsMax = parseInt(max/per), rowsMax = parseInt(max/per);
 		for (var i = 0; i < colsMax; i++) {
 			var row = [];
-			for (j = 0; j < rowsMax; j++) {
+			for (var j = 0; j < rowsMax; j++) {
 				var lng = latlngWN.lng() + per * j;
 				var lat = latlngWN.lat() - per * i;
 				// when row even shifting half -
 				if (j % 2 != 0) lat = latlngWN.lat() - per * i - per / 2;
+				// !_isOD revert
+				if(!_isOD) lat = lat = latlngWN.lat() - per * i;
 				lat = round(lat,d+2);
 				lng = round(lng,d+2);
 				// wn lat lng to a grid
@@ -823,7 +1117,7 @@ putXmlDoc('kml_out',xmlDoc);
 // boxs & lines 
 _kml['click']={'boxs':boxs,'lines':lines};
 
-return {'boxs':boxs,'lines':lines}
+return {'boxs':boxs,'lines':lines,'cols':cols}
 
 };
 
@@ -831,7 +1125,7 @@ c.data_sort = ()=>{
 
 if(_isGM){c.load_GM();return false;}
   // process xml
-var xmlDoc = getXmlDoc('data');
+var xmlDoc = getXmlDoc('kml_out');
 
 var gos=[], groundOverlays = xmlDoc.getElementsByTagName('GroundOverlay');
 var mx = _multiple;
@@ -878,7 +1172,7 @@ for(var i=0;i<folders.length;i++){
 if(featuresFolder == undefined) featuresFolder = xmlDoc.getElementsByTagName('Document')[1];
 for(var i=0, total=gos.length; i < total;i++) featuresFolder.appendChild(gos[i]['go']); 
 
-putXmlDoc('data',xmlDoc);
+putXmlDoc('kml_out',xmlDoc);
 
 // call click_grid
 var last = gos.length-1;
@@ -986,6 +1280,12 @@ for(var i=0;i<rows.length;i++){
 
 _kml['load']=load;
 
+// add file
+var ws = boxs[0].name;
+var ws =boxs[0].name, ll=boxs[0].latlngs[0];
+var wsll = ll.lat()+','+ll.lng();
+addFile({'id':'latlng','ws':ws,'wsll':wsll,'cols': rows});
+
  };
 
  c.kml_write = ()=>{
@@ -1044,7 +1344,7 @@ _kml['load']=load;
 	 var x = xmlDoc.getElementsByTagName("GroundOverlay")[0];
 	 x.parentNode.removeChild(x);
 
-	 putXmlDoc('data',xmlDoc);
+	 putXmlDoc('kml_out',xmlDoc);
  };
 
 })(latlng_map_tile);
@@ -1215,16 +1515,32 @@ function startMap() {
 							</span>
 							<span>
 								<h1>kml grid
+									<input type="button" id="isOD" class="active" value="OD"/>
 									<input type="button" id="grid_level" value="10 km"/>
 									<input type="button" id="isGM" value="isGM"/>
 									<input type="button" id="grid_GM_latlng" value="latlng-GM"/>
 									</h1>	
 								<textarea id="kml_out"></textarea>
 								<button id="kml_copy">copy</button>
+								<button id="data_sort" >load</button>
+							<button id="load_GM_latlng" >load latlng-GM</button>
 							</span>
 							<span>
 								<h1>feature
 									<button id="kml_write">write</button>
+									<button id="fileToggle" />file</button>
+									<a class="fileBoxA">
+									<div id="fileBox" style="display:none">
+										<div class="file zero">
+												<input type="button" value="Load" />
+												<input type="text" class="head" value="latlng,121.0,24.5" />
+												<input type="text" class="wsll" value="0,0" style="display:none"/>		
+												<input type="text" class="grid" value="0,0,0,0,#" />
+												<input type="button" value="Del" />
+										</div>
+									</div>
+									</a>
+									
 									</h1>
 								<div id="feature_grid">
 									<div class="css_tr">
@@ -1241,17 +1557,10 @@ function startMap() {
 									</div>
 								</div>
 							</span>
-						<span>
+						<span style="display:none">
 							<h1>kml load (round & sort)</h1>
 							<textarea id="data"></textarea>
-							<button id="data_sort" >load</button>
-							<button id="load_GM_latlng" >load latlng-GM</button>
 						</span>
-						<!--
-							<img class="lat" src="./pic/22-120-10.png"/>
-							<img class="lat" src="./pic/22-121-10.png"/>
-							<img class="lat" src="./pic/23-120-10.png"/>
-						-->
 						</div>
 					</div>
 			</div>
@@ -1301,6 +1610,16 @@ function startMap() {
 	});
 
 	document.getElementById('isGM').addEventListener('click',latlng_map_tile.isGM);
+
+document.getElementById('isOD').addEventListener('click',latlng_map_tile.isOD);
+
+	// file
+	document.getElementById('fileToggle').addEventListener('click',(e)=>{
+		e.target.classList.toggle('ON');
+		var x = document.getElementById('fileBox');
+		x.style.display = x.style.display === "none" ? "block" : "none";
+ 	});
+
 
 })();
 
