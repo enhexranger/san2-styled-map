@@ -290,7 +290,7 @@ let getENWS = (en)=>{
 	var div = parseInt(_gridNow['max']/per);
 	var max = _gridNow['metre'] * div;
 	var e0 = parseInt(e/max)*max;
-	var n0 = parseInt(e/max)%2==0 ? parseInt((n-max/2)/max)*max+max/2 : parseInt(n/max)*max ;
+	var n0 = parseInt(e/max)%2!=0 ? parseInt((n-max/2)/max)*max+max/2 : parseInt(n/max)*max ;
 	// !_isOD override
 	if(!_isOD) n0 = parseInt(n/max)*max;
 	return [e0,n0];
