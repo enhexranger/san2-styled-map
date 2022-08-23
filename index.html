@@ -440,49 +440,39 @@ let gridInfo = (x,y,o)=>{
 	exec[o]();
 };
 
-let loadFile = (h,ll,grid)=>{
-// call grid
-var hs = h.split(',');
-var lls = ll.split(',');
-var terrNs = grid.split(',').filter(x=>x!='#');
-// list1 inverse query
-var list1r = {};
-for(var k in _list1){list1r[_list1[k][0]]=k}
+let redrawMarkersByLines = (lines)=>{
+	var markers = c.features['markers'];
+	markers.map(x => x.setMap(null));
+	markers.length = 0;
+	// draw markers
+	lines.map(x => drawMarker(x.latlngs[0], c.map, markers));
+	return markers;
+};
 
-var n = hs[0];
-
-var e = {'latLng': getLatlng(lls[0],lls[1]) };
-
-var load = (g)=>{
-
-var lines = g['lines'];
-var cols = g['cols'];
-
-// fit bound with grid
-var boxs = g['boxs'], bounds = new google.maps.LatLngBounds();
-	bounds.extend(boxs[0].latlngs[0]);
-	bounds.extend(boxs[0].latlngs[2]);
+let fitBounds = (m1,m2)=>{
+	var bounds = new google.maps.LatLngBounds();
+	bounds.extend(m1);
+	bounds.extend(m2);
 	c.map.fitBounds(bounds);
+};
 
-//clear marker first
-var markers = c.features['markers'];
-markers.map(x=>x.setMap(null));
-markers.length = 0;
-// draw markers
-lines.map(x=>drawMarker(x.latlngs[0],c.map,markers));
+// marker & btn event 
+let eventMB = (m, b) => {
+	var terr = m.getTitle();
+	var j = arrNextIndex(_list2, terr);
+	var terr2 = _list2[j];
+	m.setTitle(terr2);
+	m.setIcon({ 'url': _list1[terr2][1], 'scaledSize': new google.maps.Size(32, 32) });
+	// btn
+	b.value = _list1[terr2][0];
+	if (b.classList.contains(terr)) b.classList.remove(terr);
+	b.classList.add(terr2);
+	// map
+	var key = m.getPosition().lat() + '-' + m.getPosition().lng();
+	_markersMap[key]['terr'] = terr2;
+};
 
-// markers to map
-_markersMap = {}; 
-for(var i in markers){
-	var marker = markers[i];
-	var line = lines[i];
-	var terrN = terrNs[i];
-	var terr = list1r[terrN];
-	if(terr=='empty') terr = '';
-	var key = marker.getPosition().lat()+'-'+marker.getPosition().lng();
-	_markersMap[key]={'marker':marker,'terr':terr,'line':line.latlngs};
-	marker.setTitle(terr);
-}	
+let p_cols_ms_html = (cols,ms)=>{
 // on html
 var fg = document.getElementById('feature_grid');
 var c0 = fg.children[0];
@@ -493,25 +483,10 @@ while(fg.children.length > 1){ fg.lastChild.remove(); }
 var i=0;
 cols.map(x=>{
 	x.map(y=>{
-		y.marker = markers[i];
+		y.marker = ms[i];
 		i++;
 	});
 });
-
-let event = (m,b)=>{
-			var terr = m.getTitle();
-			var j = arrNextIndex(_list2,terr);
-			var terr2 = _list2[j];
-			m.setTitle(terr2);
-			m.setIcon({'url':_list1[terr2][1],'scaledSize':new google.maps.Size(32,32)}); 
-			// btn
-			b.value=_list1[terr2][0];
-			if(b.classList.contains(terr)) b.classList.remove(terr);
-			b.classList.add(terr2);
-			// map
-			var key = m.getPosition().lat()+'-'+m.getPosition().lng();
-			_markersMap[key]['terr']=terr2;
-			};
 
 // process cols & rows
 for(var i=0;i<cols.length;i++){
@@ -544,17 +519,61 @@ for(var i=0;i<cols.length;i++){
 			}
 		} 
 		// marker & btn event
-		marker.addListener('click',()=>{event(marker,btn)}); 
-		btn.addEventListener('click',()=>{event(marker,btn)});
+		marker.addListener('click',()=>{eventMB(marker,btn)}); 
+		btn.addEventListener('click',()=>{eventMB(marker,btn)});
 	} // for j
 	fg.appendChild(cN);
-} // for i	
+	} // for i	
+
+}; // p_cols_ms_html
+
+let loadFile = (h,ll,grid)=>{
+// call grid
+var hs = h.split(',');
+var lls = ll.split(',');
+var terrNs = grid.split(',').filter(x=>x!='#');
+// list1 inverse query
+var list1r = {};
+for(var k in _list1){list1r[_list1[k][0]]=k}
+
+var n = hs[0];
+
+var e = {'latLng': getLatlng(lls[0],lls[1]) };
+
+var load = (g)=>{
+
+if(!g){alert('error');return false;}
+
+var lines = g['lines'];
+var cols = g['cols'];
+
+// fit bound with grid
+var boxs = g['boxs'];
+fitBounds(boxs[0].latlngs[0],boxs[0].latlngs[2]);
+
+//clear marker first
+var markers = redrawMarkersByLines(lines);
+
+// markers to map
+_markersMap = {}; 
+for(var i in markers){
+	var marker = markers[i];
+	var line = lines[i];
+	var terrN = terrNs[i];
+	var terr = list1r[terrN];
+	if(terr=='empty') terr = '';
+	var key = marker.getPosition().lat()+'-'+marker.getPosition().lng();
+	_markersMap[key]={'marker':marker,'terr':terr,'line':line.latlngs};
+	marker.setTitle(terr);
+}	
+
+p_cols_ms_html(cols,markers);
 
 _kml['load']=g;
 
 c.kml_write();
 
-};
+	}; // load
 
 var exec = {
 	'latlng':()=>{
@@ -569,11 +588,11 @@ var exec = {
 		var grid = c.grid_GM_latlng(e);
 		load(grid);
 	}
-	};
+	}; // exec
 
 	exec[n](); 
 
-};
+}; // loadFile
 
 let fileMan = (n,e)=>{
 	var exec = {
@@ -895,18 +914,11 @@ var load = {};
 	}
 	
 // fit bound with grid
-	var boxs = load['boxs'], bounds = new google.maps.LatLngBounds();
-	bounds.extend(boxs[0].latlngs[0]);
-	bounds.extend(boxs[0].latlngs[2]);
-	c.map.fitBounds(bounds);
-
+var boxs = load['boxs'];
+fitBounds(boxs[0].latlngs[0],boxs[0].latlngs[2]);
 //clear marker first
-var markers = c.features['markers'];
-markers.map(x=>x.setMap(null));
-markers.length = 0;
-// draw markers
 var lines = load['lines'];
-lines.map(x=>drawMarker(x.latlngs[0],c.map,markers));
+var markers = redrawMarkersByLines(lines);
 
 // markers to map
 _markersMap = {}; 
@@ -928,71 +940,7 @@ for(var i in gos){
 	} 
 }
 
-// markers to cols
-var i=0, cols=load.cols;
-cols.map(x=>{
-	x.map(y=>{
-		y.marker = markers[i];
-		i++;
-	});
-});
-
-// on html
-var fg = document.getElementById('feature_grid');
-var c0 = fg.children[0];
-// clean before append
-while(fg.children.length > 1){ fg.lastChild.remove(); }
-
-// process cols & rows
-for(var i=0;i<cols.length;i++){
-	var cN = c0.cloneNode(true);
-	var rows = cols[i];
-	for(var j=0;j<rows.length;j++){
-		var line = rows[j];
-		let marker = line.marker, btn=cN.children[j];
-		let terr = marker.getTitle();
-		// new btn
-		if(!btn){
-			var input = c0.children[0].cloneNode(true);
-			// even odd
-			if(j%2!=0) input.classList.add('even');
-			// !_isOD revert
-			if(!_isOD) input.classList.remove('even');
-			cN.appendChild(input);
-			btn=cN.children[j];
-		}
-		// set cols 
-		if(terr.length==0){
-			btn.value = ' ';		
-		}else{
-			if(_list1[terr]){
-				btn.value = _list1[terr][0];
-				btn.classList.add(terr);
-				// marker
-				marker.setIcon({'url':_list1[terr][1],'scaledSize':new google.maps.Size(32,32)});
-			}
-		} 
-		// marker & btn event
-		let event = ()=>{
-			var terr = marker.getTitle();
-			var j = arrNextIndex(_list2,terr);
-			var terr2 = _list2[j];
-			marker.setTitle(terr2);
-			marker.setIcon({'url':_list1[terr2][1],'scaledSize':new google.maps.Size(32,32)}); 
-			// btn
-			btn.value=_list1[terr2][0];
-			if(btn.classList.contains(terr)) btn.classList.remove(terr);
-			btn.classList.add(terr2);
-			// map
-			var key = marker.getPosition().lat()+'-'+marker.getPosition().lng();
-			_markersMap[key]['terr']=terr2;
-			};
-
-		marker.addListener('click',event); 
-		btn.addEventListener('click',event);
-	} // for j
-	fg.appendChild(cN);
-} // for i	
+p_cols_ms_html(load.cols,markers);
 
 _kml['load']=load;
 
@@ -1000,7 +948,7 @@ _kml['load']=load;
 var id = x==1 ? 'GM_latlng' : 'GM';
 var ws =boxs[0].name, ll=boxs[0].latlngs[0];
 var wsll = ll.lat()+','+ll.lng();
-addFile({'id':id,'ws':ws,'wsll':wsll,'cols':cols});
+addFile({'id':id,'ws':ws,'wsll':wsll,'cols':load.cols});
 
 };
 
@@ -1071,11 +1019,11 @@ var colsMax = parseInt(max/per), rowsMax = parseInt(max/per);
 				drawLine(latlngs,map,polylines,_colorSet.grid);
 				row[j] = { 'name': lat + ',' + lng, 'latlngs': latlngs };
 				lines.push(row[j]);
-	}
+			}
 			cols[i] = row;
-			} 
-
-	};
+		} 
+			
+	}; // calc
 
 	calc(lat,lng,max,per,boxs,lines,polylines,map,true);
 	
@@ -1193,18 +1141,12 @@ if(last <= 0){
 if(load['boxs'][0].latlngs[0].lat()==90){alert('error');return false;}
 
 // fit bound with grid
-	var boxs = load['boxs'], bounds = new google.maps.LatLngBounds();
-	bounds.extend(boxs[0].latlngs[0]);
-	bounds.extend(boxs[0].latlngs[2]);
-	c.map.fitBounds(bounds);
+var boxs = load['boxs'];
+fitBounds(boxs[0].latlngs[0],boxs[0].latlngs[2]);
 
 //clear marker first
-var markers = c.features['markers'];
-markers.map(x=>x.setMap(null));
-			markers.length = 0;
-// draw markers
 var lines = load['lines'];
-lines.map(x=>drawMarker(x.latlngs[0],c.map,markers));
+var markers = redrawMarkersByLines(lines);
 
 // markers to map
 _markersMap = {}; 
@@ -1258,22 +1200,8 @@ for(var i=0;i<rows.length;i++){
 			}
 		}
 		// marker & btn event
-		let event = ()=>{
-			var terr = marker.getTitle();
-			var j = arrNextIndex(_list2,terr);
-			var terr2 = _list2[j];
-			marker.setTitle(terr2);
-			marker.setIcon({'url':_list1[terr2][1],'scaledSize':new google.maps.Size(32,32)}); 
-			// btn
-			btn.value=_list1[terr2][0];
-			if(btn.classList.contains(terr)) btn.classList.remove(terr);
-			btn.classList.add(terr2);
-			// map
-			_markersMap[marker.getPosition().lat()+'-'+marker.getPosition().lng()]['terr']=terr2;
-		};
-
-		marker.addListener('click',event); 
-		btn.addEventListener('click',event);
+		marker.addListener('click',()=>{eventMB(marker,btn)}); 
+		btn.addEventListener('click',()=>{eventMB(marker,btn)});
 	}
 	fg.appendChild(rowN);
 }
