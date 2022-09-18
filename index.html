@@ -156,6 +156,8 @@ const _list1 = {
 const _list2 = ['mountain','hill','grass','tree','water','castle','city','dq2s1','dq2w3'];
 
 const _grid = {
+	'km_1000': { 'max': 100, 'per': 10, 'name':'1000 km', 'id':'km_1000', 'metre':1000000 },
+	'km_100': { 'max': 10, 'per': 1, 'name':'100 km', 'id':'km_100', 'metre':100000 },
 	'km_10': { 'max': 1, 'per': 0.1, 'name':'10 km', 'id':'km_10', 'metre':10000 },
 	'km_1': { 'max': .1, 'per': 0.01, 'name':'1 km', 'id':'km_1', 'metre':1000 },
 	'm_100': { 'max': .01, 'per': 0.001, 'name':'100m', 'id':'m_100', 'metre':100 }
@@ -167,7 +169,7 @@ const _colorSet = {
 		strokeOpacity: .8,
 		strokeWeight: 1
 	},
-	'GM': {
+	'PJ': {
 		strokeColor: "red",
 		strokeOpacity: 1,
 		strokeWeight: 1
@@ -178,7 +180,7 @@ const _multiple = 5 ;
 
 let _gridNow = _grid['km_10'];
 
-let _isGM = false;
+let _isPJ = false;
 
 let _isOD = true; // Odd Diff
  
@@ -336,21 +338,39 @@ c.isOD = (e)=>{
 	
 };
 
-c.isGM = (e)=>{
+c.isPJ = (e)=>{
 	var btn = e.target;
-	if(_isGM){ 
-		_isGM = false;
+	if(_isPJ){ 
+		_isPJ = false;
 		btn.style='background:initial';
 	}else{
-		_isGM = true;
+		_isPJ = true;
 		btn.style='background:yellow';
 	} 
 };
 
-const proj4_Defs = ()=>{
-	// ESPG:3857 google map mercator
-	const n ="EPSG:3857";
-	const zdef = "+proj=merc +a=6378137 +b=6378137 +lat_ts=0.0 +lon_0=0.0 +x_0=0.0 +y_0=0 +k=1.0 +units=m +nadgrids=@null +wktext  +no_defs";
+const proj4_Defs = (lat,lon)=>{
+	const n ="EPSG:AUTO";
+	const utm_zone = parseInt(((lon+180)/6)%60)+1;
+	// utm lat zone
+	var lz = parseInt(((lat+80)/8)%21);
+	var lzn = "cdefghjklmnpqrstuvwxx".charAt(lz);
+	var ds = lz*8-80;
+	// 2 degree CM calc
+	var z = parseInt(((lon+180)/2)%180)+1;
+	var de = z*2-180, dw = de - 2, cm = de - 1;
+	console.log(ds,cm);
+	// utm
+	//const zdef = `+proj=utm +zone=${utm_zone} +datum=WGS84 +units=m +no_defs`;
+	// tmerc 2 degree
+	//const zdef = `+proj=tmerc +lat_0=0 +lon_0=${cm} +k=1 +x_0=100000 +y_0=0 +units=m +no_defs +type=crs`;
+	//const zdef = `+proj=utm +lat_ts=${lat} +lon_0=${lon} +datum=WGS84 +units=m +no_defs`;
+	// Behrmann CEA : ESRI:54017 "+proj=cea +lat_ts=30 +lon_0=0 +x_0=0 +y_0=0 +datum=WGS84 +units=m +no_defs +type=crs"
+	const zdef = "+proj=cea +lat_ts=30 +lon_0=0 +x_0=0 +y_0=0 +datum=WGS84 +units=m +no_defs +type=crs";
+	// miller
+	//const zdef = "+proj=mill +R_A +lon_0=0 +x_0=0 +y_0=0 +datum=WGS84 +units=m +no_defs +type=crs";
+	// eqc
+	// const zdef = "+proj=eqc +lat_ts=34 +lat_0=34 +lon_0=112 +x_0=2500000 +y_0=2500000";
 
 	proj4.defs([
   [
@@ -361,16 +381,16 @@ const proj4_Defs = ()=>{
   
 	};
 
-const ll2GM = (ll)=>{
+const ll2Pj = (ll)=>{
 	let lat = ll[0], lon = ll[1];
-	const en_m = proj4("EPSG:4326", "EPSG:3857", [lon, lat]);
+	const en_m = proj4("EPSG:4326", "EPSG:AUTO", [lon, lat]);
   	const e0 = en_m[0].toFixed(0); //easting
   	const n0 = en_m[1].toFixed(0); //northing
 	return [e0,n0];
 	};
 
-const gM2ll = (en_m) =>{
-	var r = proj4("EPSG:3857", "EPSG:4326", en_m); 
+const pj2ll = (en_m) =>{
+	var r = proj4("EPSG:AUTO", "EPSG:4326", en_m); 
 	return [r[1],r[0]];
 };
 
@@ -580,12 +600,12 @@ var exec = {
 		var grid = c.click_grid(e);
 		load(grid);
 	},
-	'GM':()=>{
-		var grid = c.grid_GM(e);
+	'PJ':()=>{
+		var grid = c.grid_PJ(e);
 		load(grid);
 	},
-	'GM_latlng':()=>{
-		var grid = c.grid_GM_latlng(e);
+	'PJ_latlng':()=>{
+		var grid = c.grid_PJ_latlng(e);
 		load(grid);
 	}
 	}; // exec
@@ -660,7 +680,7 @@ let addFile = (d)=>{
 	
 };
 
-c.grid_GM_latlng = (latlngA)=>{
+c.grid_PJ_latlng = (latlngA)=>{
 
 // from assigned
 if(latlngA.lat){
@@ -682,11 +702,11 @@ if(lat0==90){alert('error');return false;}
 var boxDownLat = lat0 - _gridNow['max'];  
 var boxRightLng = lng0 + _gridNow['max'];
 
-proj4_Defs();
+proj4_Defs(lat0,lng0);
 
-var en = ll2GM([lat0,lng0]);
-var enDown = ll2GM([boxDownLat,lng0]);
-var enRight = ll2GM([lat0,boxRightLng]);
+var en = ll2Pj([lat0,lng0]);
+var enDown = ll2Pj([boxDownLat,lng0]);
+var enRight = ll2Pj([lat0,boxRightLng]);
 var div = parseInt(_gridNow['max']/_gridNow['per']);
 
 var per = _gridNow['metre'];
@@ -703,7 +723,7 @@ var boxEN = [news.ws,news.wn,news.en,news.es,news.ws];
 var box = {'name':news.ws[0]+','+news.ws[1],'latlngs':[]};
 var d = 6;
 boxEN.map(x=>{
-	var ll = gM2ll(x);
+	var ll = pj2ll(x);
 	var llr = getLLR(ll,d);
 	var latlng = getLatlng(llr[0],llr[1]);
 	box.latlngs.push(latlng);
@@ -739,20 +759,20 @@ for(var i=0; i < colsMax ; i++){
 				,'es': [x+per,y]
 			};
 		// convert to latlng
-		var ll = gM2ll(n.sw);
+		var ll = pj2ll(n.sw);
 		var llr = getLLR(ll,d);
 		n.sw = getLatlng(llr[0],llr[1]);
-		var ll = gM2ll(n.wn);
+		var ll = pj2ll(n.wn);
 		var llr = getLLR(ll,d);
 		n.wn = getLatlng(llr[0],llr[1]);
-		var ll = gM2ll(n.en);
+		var ll = pj2ll(n.en);
 		var llr = getLLR(ll,d);
 		n.en = getLatlng(llr[0],llr[1]);
-		var ll = gM2ll(n.es);
+		var ll = pj2ll(n.es);
 		var llr = getLLR(ll,d);
 		n.es = getLatlng(llr[0],llr[1]);
 		var latlngs = [n.sw,n.wn,n.en,n.es,n.sw];
-		drawLine(latlngs,c.map,c.features.polylines,_colorSet.GM);
+		drawLine(latlngs,c.map,c.features.polylines,_colorSet.PJ);
 		
 		row[j]={'name':x+','+y,'latlngs':latlngs};
 		lines.push(row[j]);
@@ -766,14 +786,14 @@ grid_KML(box,lines);
 return {'boxs':[box],'lines':lines,'cols':cols};
 };
 
-c.grid_GM = (e)=>{
+c.grid_PJ = (e)=>{
 
 	var lat = e.latLng.lat();
 	var lng = e.latLng.lng();
 
-proj4_Defs();
+proj4_Defs(lat,lng);
 
-var en = ll2GM([lat,lng]);
+var en = ll2Pj([lat,lng]);
 var en0 = getENWS(en);
 
 var div = parseInt(_gridNow['max']/_gridNow['per']);
@@ -785,7 +805,7 @@ var boxEN = [news.ws,news.wn,news.en,news.es,news.ws];
 var box = {'name':news.ws[0]+','+news.ws[1],'latlngs':[]};
 var d = 6;
 boxEN.map(x=>{
-	var ll = gM2ll(x);
+	var ll = pj2ll(x);
 	var llr = getLLR(ll,d);
 	var latlng = getLatlng(llr[0],llr[1]);
 	box.latlngs.push(latlng);
@@ -804,6 +824,8 @@ drawLine(box.latlngs,c.map,c.features.polylines);
 var cols=[], en1=[news.wn[0],news.wn[1]-per], lines=[];
 var colsMax = div, rowsMax = div;
 
+// TM2 temporarily test
+// rowsMax = 2;
 for(var i=0; i < colsMax ; i++){
 	var row=[];
 	for(var j=0; j < rowsMax ; j++){ 
@@ -820,20 +842,20 @@ for(var i=0; i < colsMax ; i++){
 				,'es': [x+per,y]
 			};
 		// convert to latlng
-		var ll = gM2ll(n.sw);
+		var ll = pj2ll(n.sw);
 		var llr = getLLR(ll,d);
 		n.sw = getLatlng(llr[0],llr[1]);
-		var ll = gM2ll(n.wn);
+		var ll = pj2ll(n.wn);
 		var llr = getLLR(ll,d);
 		n.wn = getLatlng(llr[0],llr[1]);
-		var ll = gM2ll(n.en);
+		var ll = pj2ll(n.en);
 		var llr = getLLR(ll,d);
 		n.en = getLatlng(llr[0],llr[1]);
-		var ll = gM2ll(n.es);
+		var ll = pj2ll(n.es);
 		var llr = getLLR(ll,d);
 		n.es = getLatlng(llr[0],llr[1]);
 		var latlngs = [n.sw,n.wn,n.en,n.es,n.sw];
-		drawLine(latlngs,c.map,c.features.polylines,_colorSet.GM);
+		drawLine(latlngs,c.map,c.features.polylines,_colorSet.PJ);
 		
 		row[j]={'name':x+','+y,'latlngs':latlngs};
 		lines.push(row[j]);
@@ -847,7 +869,7 @@ grid_KML(box,lines);
 return {'boxs':[box],'lines':lines,'cols':cols};
 };
 
-c.load_GM = (x)=>{
+c.load_PJ = (x)=>{
 
  // process xml
  var xmlDoc = getXmlDoc('kml_out');
@@ -904,13 +926,16 @@ var load = {};
 	var polygon = xmlDoc.getElementsByTagName('Polygon')[0];
 	if(!polygon){alert('no polygon');return false;}
 	var coor = polygon.getElementsByTagName('coordinates')[0];
-	var arr = coor.textContent.split(' ')[0].split(',');
-	var e = {'latLng': getLatlng(arr[1],arr[0]) };
+	var arr = coor.textContent.split(' ');
+	var m0 = arr[0].split(','), m2 = arr[2].split(',');
+	var lat = m0[1]*1+(m2[1]*1-m0[1]*1)/2, lng = m0[0]*1+(m2[0]*1-m0[0]*1)/2;
+	var e = {'latLng': getLatlng(lat,lng) };
+	//var e = {'latLng': getLatlng(m2[1],m2[0]) };
 
 	if(x==1){
-		load = c.grid_GM_latlng(e);
+		load = c.grid_PJ_latlng(e);
 	}else{
-		load = c.grid_GM(e);
+		load = c.grid_PJ(e);
 	}
 	
 // fit bound with grid
@@ -945,7 +970,7 @@ p_cols_ms_html(load.cols,markers);
 _kml['load']=load;
 
 // add File
-var id = x==1 ? 'GM_latlng' : 'GM';
+var id = x==1 ? 'PJ_latlng' : 'PJ';
 var ws =boxs[0].name, ll=boxs[0].latlngs[0];
 var wsll = ll.lat()+','+ll.lng();
 addFile({'id':id,'ws':ws,'wsll':wsll,'cols':load.cols});
@@ -954,7 +979,7 @@ addFile({'id':id,'ws':ws,'wsll':wsll,'cols':load.cols});
 
 c.click_grid = (e)=>{
 
-if(_isGM){ c.grid_GM(e);return false;}
+if(_isPJ){ c.grid_PJ(e);return false;}
 
       var lat = e.latLng.lat() ; 
       var lng = e.latLng.lng() ;
@@ -1071,7 +1096,7 @@ return {'boxs':boxs,'lines':lines,'cols':cols}
 
 c.data_sort = ()=>{
 
-if(_isGM){c.load_GM();return false;}
+if(_isPJ){c.load_PJ();return false;}
   // process xml
 var xmlDoc = getXmlDoc('kml_out');
 
@@ -1445,13 +1470,13 @@ function startMap() {
 								<h1>kml grid
 									<input type="button" id="isOD" class="active" value="OD"/>
 									<input type="button" id="grid_level" value="10 km"/>
-									<input type="button" id="isGM" value="isGM"/>
-									<input type="button" id="grid_GM_latlng" value="latlng-GM"/>
+									<input type="button" id="isPJ" value="isPJ"/>
+									<input type="button" id="grid_PJ_latlng" value="latlng-PJ"/>
 									</h1>	
 								<textarea id="kml_out"></textarea>
 								<button id="kml_copy">copy</button>
 								<button id="data_sort" >load</button>
-							<button id="load_GM_latlng" >load latlng-GM</button>
+							<button id="load_PJ_latlng" >load latlng-PJ</button>
 							</span>
 							<span>
 								<h1>feature
@@ -1531,13 +1556,13 @@ function startMap() {
 	var gridLevelChange = latlng_map_tile.gridLevelChange;
 	document.getElementById('grid_level').addEventListener('click',gridLevelChange);
 
-	document.getElementById('grid_GM_latlng').addEventListener('click',latlng_map_tile.grid_GM_latlng);
+	document.getElementById('grid_PJ_latlng').addEventListener('click',latlng_map_tile.grid_PJ_latlng);
 
-	document.getElementById('load_GM_latlng').addEventListener('click',()=>{
-		latlng_map_tile.load_GM(1);
+	document.getElementById('load_PJ_latlng').addEventListener('click',()=>{
+		latlng_map_tile.load_PJ(1);
 	});
 
-	document.getElementById('isGM').addEventListener('click',latlng_map_tile.isGM);
+	document.getElementById('isPJ').addEventListener('click',latlng_map_tile.isPJ);
 
 document.getElementById('isOD').addEventListener('click',latlng_map_tile.isOD);
 
