@@ -132,6 +132,18 @@ input.fr.dq2w3 {
 	background-image: url('https://raw.githubusercontent.com/enhexranger/san2-styled-map/main/icon/dq2w3.png');
 }
 
+h1.para {
+	margin: 7px 0 7px 0;
+}
+
+div.gridOption {
+	border: 1px solid black;
+	display: none;
+}
+div.gridOption.active {
+    display: block;
+}
+
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.5.0/proj4.js"></script>
 <script>
@@ -180,7 +192,8 @@ const _multiple = 5 ;
 
 let _gridNow = _grid['km_10'];
 
-let _isPJ = false;
+let _isPJ = false; // deprecated
+let _gridType = 'go_LLDB';
 
 let _isOD = true; // Odd Diff
  
@@ -298,6 +311,161 @@ let getENWS = (en)=>{
 	return [e0,n0];
 };
 
+let marker2key = (marker)=>{
+	var d = 6;
+	return round(marker.getPosition().lat(),d)+'-'+round(marker.getPosition().lng(),d);
+};
+
+// https://www.movable-type.co.uk/scripts/latlong.html
+let getLLBearing = (lat1,lon1,lat2,lon2)=>{
+	const φ1 = lat1*Math.PI/180; 
+	const λ1 = lon1*Math.PI/180;
+	const φ2 = lat2*Math.PI/180; 
+	const λ2 = lon2*Math.PI/180;
+	const y = Math.sin(λ2-λ1) * Math.cos(φ2);
+	const x = Math.cos(φ1)*Math.sin(φ2) - Math.sin(φ1)*Math.cos(φ2)*Math.cos(λ2-λ1);
+	const θ = Math.atan2(y, x);
+	return brng = (θ*180/Math.PI + 360) % 360; // in degrees
+};
+
+let getLLDT = (lat1,lon1,lat2,lon2)=>{
+const R = 6378137; // metres
+const φ1 = lat1 * Math.PI/180; // φ, λ in radians
+const φ2 = lat2 * Math.PI/180;
+const Δφ = (lat2-lat1) * Math.PI/180;
+const Δλ = (lon2-lon1) * Math.PI/180;
+
+const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
+          Math.cos(φ1) * Math.cos(φ2) *
+          Math.sin(Δλ/2) * Math.sin(Δλ/2);
+const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+
+const d = R * c; // in metres
+return d;
+};
+
+let getLLDB = (lat1,lng1,d,br)=>{	
+	const R = 6378137;
+	const brng = br*Math.PI/180;
+	const φ1 = lat1*Math.PI/180; 
+	const λ1 = lng1*Math.PI/180;
+	const φ2 = Math.asin( Math.sin(φ1)*Math.cos(d/R) + Math.cos(φ1)*Math.sin(d/R)*Math.cos(brng) );
+	const λ2 = λ1 + Math.atan2(Math.sin(brng)*Math.sin(d/R)*Math.cos(φ1),Math.cos(d/R)-Math.sin(φ1)*Math.sin(φ2));
+	var lat2 = φ2*180/Math.PI, lng2 = λ2*180/Math.PI;
+	return {'lat':lat2,'lng':lng2,'str':lng2+','+lat2+',0'};
+};
+
+let gridTypeMan = (id)=>{
+	let grids = {
+		'LLDB':{
+			'click':(e)=>{c.grid_LLDB(e)},
+			'load':()=>{c.load_PJ(1)},
+			'init':()=>{
+
+				const cLY = '34.717618,112.636784';
+
+				const indexMax = {
+					'n':80,
+					'e':120,
+					'w':120,
+					's':180
+				};
+				
+				var div = document.getElementById('go_LLDB');
+				var inputs = div.getElementsByTagName('input');
+				var center = inputs[0];
+				var btn = inputs[1];
+				var news = {
+					'n':inputs[2],
+					'e':inputs[3],
+					'w':inputs[4],
+					's':inputs[5],
+				}
+			
+				var exec = {
+					'initOnce':()=> {
+
+						center.value = cLY;
+
+						for(k in indexMax) news[k].value = indexMax[k];
+
+						btn.addEventListener('click', () => {
+							if (btn.value == 'done') {
+								btn.value = 'edit';
+								btn.ext.marker.setMap(null);
+								btn.style.background = btn.ext.bk;
+								return false;
+							}
+							// drop a marker
+							var marker = new google.maps.Marker({
+								map: c.map,
+								draggable: true,
+								animation: google.maps.Animation.DROP,
+								position: c.map.getCenter(),
+								title: 'LLDB center'
+							});
+							// dragend update center
+							marker.addListener('drag', (e) => {
+								center.value = e.latLng.toUrlValue();
+							});
+							btn.value = 'done';
+							btn.ext = { 'marker': marker, 'bc': btn.style.background };
+							btn.style.background = 'yellow';
+						});
+
+					},
+					'getCenter':()=>{
+						var ll = center.value.split(',');
+						return {'lat':ll[0],'lng':ll[1]}
+					},
+					getIndexMax:()=>{
+						var r = {};
+						for(var k in news){ r[k]=parseInt(news[k].value)}
+						return r;
+					}
+				};
+				return exec;	
+			}
+		},
+		'PJ':{
+			'click':(e)=>{c.grid_PJ(e)},
+			'load':()=>{c.load_PJ()},
+			'init':()=>{}
+		},
+		'latlng':{
+			'click':(e)=>{c.click_grid(e)},
+			'load':()=>{c.data_sort()},
+			'init':()=>{}
+		}
+	};
+	return grids[id];
+};
+
+c.gridOptionMan = (id, ext)=>{
+
+	if(ext=='change') _gridType = id;
+
+	var opsDefault = {
+		'go_PJ':{
+			'click':(e)=>{gridTypeMan('PJ').click(e)},
+			'load':()=>{gridTypeMan('PJ').load()},
+			'init':()=>{}
+		},
+		'go_LLDB':{
+			'click':(e)=>{gridTypeMan('LLDB').click(e)},
+			'load':()=>{gridTypeMan('LLDB').load()},
+			'init':()=>{gridTypeMan('LLDB').init().initOnce()}
+		},
+		'go_latlng':{
+			'click':(e)=>{gridTypeMan('latlng').click(e)},
+			'load':()=>{gridTypeMan('latlng').load()},
+			'init':()=>{}
+		}
+	};
+
+	return opsDefault[id];
+};
+
 c.gridLevelChange = ()=>{
 	var input = document.getElementById('grid_level');
 	var name=input.value, names = [];
@@ -338,6 +506,7 @@ c.isOD = (e)=>{
 	
 };
 
+// deprecated
 c.isPJ = (e)=>{
 	var btn = e.target;
 	if(_isPJ){ 
@@ -365,12 +534,12 @@ const proj4_Defs = (lat,lon)=>{
 	// tmerc 2 degree
 	//const zdef = `+proj=tmerc +lat_0=0 +lon_0=${cm} +k=1 +x_0=100000 +y_0=0 +units=m +no_defs +type=crs`;
 	//const zdef = `+proj=utm +lat_ts=${lat} +lon_0=${lon} +datum=WGS84 +units=m +no_defs`;
-	// Behrmann CEA : ESRI:54017 "+proj=cea +lat_ts=30 +lon_0=0 +x_0=0 +y_0=0 +datum=WGS84 +units=m +no_defs +type=crs"
-	const zdef = "+proj=cea +lat_ts=30 +lon_0=0 +x_0=0 +y_0=0 +datum=WGS84 +units=m +no_defs +type=crs";
+	//Behrmann CEA : ESRI:54017 "+proj=cea +lat_ts=30 +lon_0=0 +x_0=0 +y_0=0 +datum=WGS84 +units=m +no_defs +type=crs"
+	const zdef = "+proj=cea +lat_ts=30 +lon_0=112 +x_0=2500000 +y_0=2500000 +datum=WGS84 +units=m +no_defs +type=crs";
 	// miller
-	//const zdef = "+proj=mill +R_A +lon_0=0 +x_0=0 +y_0=0 +datum=WGS84 +units=m +no_defs +type=crs";
+	// const zdef = "+proj=mill +R_A +lon_0=112 +x_0=2500000 +y_0=2500000 +datum=WGS84 +units=m +no_defs +type=crs";
 	// eqc
-	// const zdef = "+proj=eqc +lat_ts=34 +lat_0=34 +lon_0=112 +x_0=2500000 +y_0=2500000";
+	// const zdef = "+proj=eqc +lat_ts=37.5 +lat_0=34 +lon_0=112 +x_0=2500000 +y_0=2500000";
 
 	proj4.defs([
   [
@@ -454,6 +623,10 @@ let gridInfo = (x,y,o)=>{
 			var e0 = x, n0 = y;
 			var info = 'WestSouth Easting,Northing: ' + round(e0, 0) + ',' + round(n0, 0) + "<br/>";
 			infoElem.innerHTML = info ;
+		},
+		'cc':()=>{
+			var info = 'center key: '+x+','+y+'<br/>';
+			infoElem.innerHTML = info ;
 		}
 	};
 
@@ -488,7 +661,7 @@ let eventMB = (m, b) => {
 	if (b.classList.contains(terr)) b.classList.remove(terr);
 	b.classList.add(terr2);
 	// map
-	var key = m.getPosition().lat() + '-' + m.getPosition().lng();
+	var key = marker2key(m);
 	_markersMap[key]['terr'] = terr2;
 };
 
@@ -582,7 +755,7 @@ for(var i in markers){
 	var terrN = terrNs[i];
 	var terr = list1r[terrN];
 	if(terr=='empty') terr = '';
-	var key = marker.getPosition().lat()+'-'+marker.getPosition().lng();
+	var key = marker2key(marker);
 	_markersMap[key]={'marker':marker,'terr':terr,'line':line.latlngs};
 	marker.setTitle(terr);
 }	
@@ -604,7 +777,11 @@ var exec = {
 		var grid = c.grid_PJ(e);
 		load(grid);
 	},
-	'PJ_latlng':()=>{
+	'LLDB':()=>{
+		var grid = c.grid_LLDB(e);
+		load(grid);
+	},
+	'PJ_latlng':()=>{ 	// deprecated
 		var grid = c.grid_PJ_latlng(e);
 		load(grid);
 	}
@@ -623,9 +800,9 @@ let fileMan = (n,e)=>{
 			e.target.parentNode.classList.add('current');
 			// process data
 			var headStr = e.target.parentNode.children[1].value;
-			var wsllStr = e.target.parentNode.children[2].value;
+			var bcllStr = e.target.parentNode.children[2].value;
 			var gridStr = e.target.parentNode.children[3].value;
-			loadFile(headStr,wsllStr,gridStr);
+			loadFile(headStr,bcllStr,gridStr);
 		},
 		'del':()=>{
 			e.target.parentNode.remove();
@@ -640,8 +817,8 @@ let addFile = (d)=>{
 	var f0 = fb.children[0];
 	var fn = f0.cloneNode(true);
 	// head
-	fn.children[1].defaultValue=d['id']+','+d['ws'];
-	fn.children[2].defaultValue=d['wsll'];
+	fn.children[1].defaultValue=d['id']+','+d['bn'];
+	fn.children[2].defaultValue=d['bcll'];
 	// grid
 	var arr=[], cols = d['cols'];
 	cols.map(x=>{
@@ -680,6 +857,7 @@ let addFile = (d)=>{
 	
 };
 
+// deprecated
 c.grid_PJ_latlng = (latlngA)=>{
 
 // from assigned
@@ -869,6 +1047,450 @@ grid_KML(box,lines);
 return {'boxs':[box],'lines':lines,'cols':cols};
 };
 
+c.grid_LLDB = (e)=>{
+
+var lat = e.latLng.lat();
+var lng = e.latLng.lng();
+
+var d = _gridNow['metre'];
+console.time(1);
+// center & corner constructor
+class CC {
+	constructor(latC,lngC,kx,ky) {
+		this.c = {'lat':latC,'lng':lngC};
+		this.kx = kx;
+		this.ky = ky;
+	}
+	getNEWS(){
+		let R = (d/2)*Math.sqrt(2);
+		var ws = getLLDB(this.c.lat,this.c.lng,R,180+45);
+		var wn = getLLDB(this.c.lat,this.c.lng,R,270+45);
+		var en = getLLDB(this.c.lat,this.c.lng,R,0+45);
+		var es = getLLDB(this.c.lat,this.c.lng,R,90+45);
+		return {'ws':ws,'wn':wn,'es':es,'en':en};
+	}
+	// useless?
+	/* chkIn(lat,lng){
+		var r = this.getNEWS();
+		var inLat = ( lat >= r.ws.lat && lat < r.en.lat);
+		var inLng = ( lng >= r.ws.lng && lng < r.en.lng);
+		return (inLat && inLng); 	
+	} */
+	// useless?
+	//getDistance(lat,lng){
+	//	return getLLDT(this.c.lat,this.c.lng,lat,lng); 
+	//}
+}
+
+// 東漢洛陽中心
+var cll = gridTypeMan('LLDB').init().getCenter();
+let cLY = new CC(cll.lat,cll.lng,0,0);
+
+// clear lines
+c.features.polylines.map(x=>x.setMap(null));
+c.features.polylines.length = 0;	
+// clear markers
+c.features.markers.map(x=>x.setMap(null));
+c.features.markers.length = 0;	
+
+// draw target
+drawMarker(getLatlng(lat,lng),c.map,c.features.markers);
+
+// draw line func
+var drawGridC = (pc)=>{
+	var r = pc.getNEWS();
+	// // wn xy to grid
+	var n = {'ws':getLatlng(r.ws.lat,r.ws.lng)
+			,'wn':getLatlng(r.wn.lat,r.wn.lng)
+			,'en':getLatlng(r.en.lat,r.en.lng)
+			,'es':getLatlng(r.es.lat,r.es.lng)};
+	// create grid pt sw wn en es
+	var latlngs = [n.ws,n.wn,n.en,n.es,n.ws];
+	drawLine(latlngs,c.map,c.features.polylines,_colorSet.PJ);
+	var line = {'name':pc.kx+','+pc.ky,'latlngs':latlngs};	
+	return line;
+};
+
+// calculate whole sango grid
+var inews = gridTypeMan('LLDB').init().getIndexMax();
+var eiMax = inews.e, wiMax = inews.w, niMax = inews.n, siMax = inews.s; // 10 km grid
+// all grid points of center ; target in result key
+var pts = new Map();
+
+console.timeLog(1,'1: init');
+// 另一個解算 x0 y0 的辦法: 直接從距離等分, 有趣的是:
+// x 從斜邊, y用緯度差可以組合出等同解算所有網格距離遠近最近的網格, 但會誤差一格
+// y 從斜邊, x用經度差則會累積誤差(洛陽到台灣時是四格)
+// 然而真正耗能的是 1計算所有10km網格中心點 2同時放樣了網格四角座標 3 map物件太大
+// 所有網格將在10x10繪製時會取用，但以外的網格沒用到就浪費了
+// get dx from distance & bearing ; get dy from longitude difference 
+var br = getLLBearing(cll.lat,cll.lng,lat,lng);
+var dd = getLLDT(cll.lat,cll.lng,lat,lng);
+//var dy = dd*Math.cos(br*Math.PI/180);
+var dx = dd*Math.sin(br*Math.PI/180);
+//var dx2 = getLLDT(cll.lat,cll.lng,cll.lat,lng);
+var dy2 = getLLDT(cll.lat,cll.lng,lat,cll.lng);
+//var br2 = Math.atan(dy/dx)*180/Math.PI-90; // check
+//if(cll.lng > lng ) dx2=dx2*(-1);
+if(cll.lat > lat ) dy2=dy2*(-1);
+// target dx to grid index divided by metre (10km)
+// but some little problem 1 index difference not solved 
+var xyt = {'x':round(dx/d,0), 'y':round(dy2/d,0)};
+console.timeLog(1,'2: xyt');
+
+// c = 0,0 wn = -4,5 en = 6,5 es = 6,-5
+// -4,5 ------------ 5,4
+//
+//          0,0
+//
+// -4,-5 ----------- 5,-5
+// -4,-6 ----------- 5,-6
+//
+//          0,-10
+//
+// -4,-15 ----------- 6,-15
+// calculate 10x10 grid map
+// Quadrant detect
+var ew='e', ns='n';
+if(cll.lat > lat ) ns = 's';
+if(cll.lng > lng ) ew = 'w';
+
+class CC2 {
+	constructor(ckx,cky){
+		this.ckxy = [ckx,cky];
+		this.kws = [ckx-4,cky-5];
+		this.kwn = [ckx-4,cky+5];
+		this.ken = [ckx+5,cky+4];
+		this.kes = [ckx+5,cky-5];
+	}
+	chkIn(tkxy){
+		var inX = (tkxy.x >= this.kws[0] && tkxy.x <= this.ken[0]);
+		var inY = (tkxy.y >= this.kws[1] && tkxy.y <= this.ken[1]);
+		return (inX && inY);
+	}
+	chkInX(tkx){
+		return (tkx >= this.kws[0] && tkx <= this.ken[0]);
+	}
+	chkInY(tky){
+		return (tky >= this.kws[1] && tky <= this.ken[1]);
+	}
+}
+
+// start calculate cc2 grids
+var rc = [];
+var cc2 = new CC2(0,0);
+if (cc2.chkIn(xyt)) { rc.push(cc2) }
+
+var dEW = (kx,ky)=>{
+	
+	if (ew == 'e') {
+		//  px 2 east
+		var kxy = [kx, ky];
+		for (var i = 1; i <= parseInt(eiMax / 10); i++) {
+			var nx = kxy[0] + 10;
+			kxy = [nx, kxy[1]];
+			if (_isOD && i % 2 == 0) kxy = [nx, kxy[1] - 5];
+			if (_isOD && i % 2 != 0) kxy = [nx, kxy[1] + 5];
+			var cc2 = new CC2(kxy[0], kxy[1]);
+			if (cc2.chkIn(xyt)) { rc.push(cc2); break; }
+		}
+	}
+
+	if (ew == 'w') {
+		var kxy = [kx, ky];
+		for (var i = 1; i <= parseInt(wiMax / 10); i++) {
+			var nx = kxy[0] - 10;
+			kxy = [nx, kxy[1]];
+			if (_isOD && i % 2 == 0) kxy = [nx, kxy[1] - 5];
+			if (_isOD && i % 2 != 0) kxy = [nx, kxy[1] + 5];
+			var cc2 = new CC2(kxy[0], kxy[1]);
+			if (cc2.chkIn(xyt)) { rc.push(cc2); break; }
+		}
+	}
+	
+};
+
+dEW(0,0);
+
+if(ns=='n'){
+	// center 2 north
+	var kxy = [0,0];
+	for(var ni=1;ni<=parseInt(niMax/10);ni++){
+		var ny = kxy[1]+10;
+		kxy = [kxy[0],ny];
+		var cc2 = new CC2(kxy[0],kxy[1]);
+		if(cc2.chkIn(xyt)){rc.push(cc2); break;}
+		dEW(kxy[0],kxy[1]);	
+	}
+}
+
+if(ns=='s'){
+	// center 2 south
+	var kxy = [0,0];
+	for(var si=1;si<=parseInt(siMax/10);si++){
+		var ny = kxy[1]-10;
+		kxy = [kxy[0],ny];
+		var cc2 = new CC2(kxy[0],kxy[1]);
+		if(cc2.chkIn(xyt)){rc.push(cc2); break;}
+		dEW(kxy[0],kxy[1]);
+	}
+}
+
+// target xy snap to 10x10 grid center
+var cc2 = rc[0];
+console.timeLog(1,'3: cc2');
+// draw grid part
+var drawEastWest = (p0,ky,_ns)=>{
+
+if(ew=='e' || cc2.ckxy[0] == 0 || _ns=='n_last' || _ns=='s_last'){
+//  px 2 east
+var be = 90;
+var px = p0.c;
+var iMax = eiMax;;
+if(_ns=='n') iMax = Math.abs(cc2.ken[0]);
+if(_ns=='s') iMax = Math.abs(cc2.kes[0]);
+for(var i=1;i<=iMax;i++){
+	px = getLLDB(px.lat,px.lng,d,be);
+	if(_isOD && i%2==0) px = getLLDB(px.lat,px.lng,d/2,0);
+	if(_isOD && i%2!=0) px = getLLDB(px.lat,px.lng,d/2,180);
+	var cc = new CC(px.lat,px.lng,i,ky);
+	var b = cc2.chkIn({'x':i,'y':ky});
+	if(b){
+		pts.set(i+','+ky ,cc);
+		}
+	// enMax
+	if(i==iMax && _ns=='n_last'){
+		pts.set(i+','+ky ,cc);
+		}
+	// esMax
+	if(i==iMax && _ns=='s_last'){
+		pts.set(i+','+ky ,cc);
+			}
+		}
+	}
+
+if(ew=='w' || cc2.ckxy[0] == 0 || _ns=='n_last' || _ns=='s_last'){
+// px 2 west
+var bw = 270;
+var px = p0.c;
+var iMax=wiMax;
+if(_ns=='n') iMax = Math.abs(cc2.kwn[0]);
+if(_ns=='s') iMax = Math.abs(cc2.kws[0]);
+	for(var i=1;i<=iMax;i++){
+	px = getLLDB(px.lat,px.lng,d,bw);
+	if(_isOD && i%2==0) px = getLLDB(px.lat,px.lng,d/2,0);
+	if(_isOD && i%2!=0) px = getLLDB(px.lat,px.lng,d/2,180);
+	var cc = new CC(px.lat,px.lng,-i,ky);
+	var b = cc2.chkIn({'x':-i,'y':ky});
+	if(b){
+		pts.set(-i+','+ky,cc);
+		}
+	// wnMax
+	if(i==iMax && _ns=='n_last'){
+		pts.set(-i+','+ky ,cc);
+		}
+	// wsMax
+	if(i==iMax && _ns=='s_last'){
+		pts.set(-i+','+ky ,cc);
+			}
+		}
+	}
+
+};
+
+var by = cc2.chkInY(0); 
+	if(by){
+		var cc = cLY;
+		var bx = cc2.chkInX(0);
+		if(bx) pts.set('0,0',cc);
+		drawEastWest(cc,0);
+	}
+
+//if(ns=='n' || cc2.ckxy[1]==0){
+if(1){	
+// center 2 north
+var bn = 0;
+var py = cLY.c;
+var yMax = niMax;
+for(var y=1;y<=yMax;y++){
+	py = getLLDB(py.lat,py.lng,d,bn);
+	var by = cc2.chkInY(y); 
+	var cc = new CC(py.lat,py.lng,0,y);
+	if(by){
+		var bx = cc2.chkInX(cc.kx);
+		if(bx) pts.set('0,'+y,cc);
+		drawEastWest(cc,y,'n');
+	}
+	if(y==yMax){
+		drawEastWest(cc,y,'n_last');
+		}
+	}
+}
+
+//if(ns=='s' || cc2.ckxy[1]==0){
+if(1){
+// center 2 south
+var bs = 180;
+var py = cLY.c;
+var yMax = siMax;
+for(var y=1;y<=yMax;y++){
+	py = getLLDB(py.lat,py.lng,d,bs);
+	var by = cc2.chkInY(-y);
+	var cc = new CC(py.lat,py.lng,0,-y); 
+	if(by){
+		var bx = cc2.chkInX(cc.kx);
+		if(bx) pts.set('0,-'+y,cc);
+		drawEastWest(cc,-y,'s');
+	}
+	if(y==yMax){
+		drawEastWest(cc,-y,'s_last');	
+		}
+	}
+}
+console.timeLog(1,'4: cc');
+
+if(1==1){
+// draw whole box 
+var wn = pts.get(-wiMax+','+niMax);
+var ws = pts.get(-wiMax+',-'+siMax);
+var en = pts.get(eiMax+','+niMax);
+var es = pts.get(eiMax+',-'+siMax);
+var news = {
+	'ws':[ws.c.lat,ws.c.lng],
+	'wn':[wn.c.lat,wn.c.lng],
+	'en':[en.c.lat,en.c.lng],
+	'es':[es.c.lat,es.c.lng]
+	};
+var boxEN = [news.ws,news.wn,news.en,news.es,news.ws];
+var latlngs = [];
+boxEN.map(x=>{
+var llr = getLLR(x,5);
+var latlng = getLatlng(llr[0],llr[1]);
+latlngs.push(latlng);
+});
+drawLine(latlngs,c.map,c.features.polylines);
+} 
+// marker xyt
+var pt = pts.get(xyt.x+','+xyt.y);
+drawMarker(getLatlng(pt.c.lat,pt.c.lng),c.map,c.features.markers);
+
+// cc2 center
+var x0 = cc2.ckxy[0], y0 = cc2.ckxy[1];
+// start to draw grids
+var bex = 5, bwx = 4, bny = 4, bsy = 5;
+
+var drawEWR = (kx,ky)=>{
+
+	var ew = {'e':{},'w':{},'ke':'','kw':'','row':[]};
+
+	// starter 
+	var arr = [];
+	var line = drawGridC(pts.get(kx+','+ky));
+	arr.push({'x':kx,'line':line});
+
+// east
+for(var x=1;x<=bex;x++){
+	var kxn = kx + x;
+	var key = kxn+','+ky;
+	var cc = pts.get(key);
+	if(!cc) continue;
+	var line = drawGridC(cc);
+	arr.push({'x':kxn,'line':line});
+ }
+ ew.e = cc, ew.ke = key;
+ // west
+ for(var x=1;x<=bwx;x++){
+	var kxn = kx - x;
+	var key = kxn+','+ky;
+	var cc = pts.get(key);
+	if(!cc) continue;
+	var line = drawGridC(cc);
+	arr.push({'x':kxn,'line':line});
+ }
+ ew.w = cc, ew.kw = key;
+
+// line in row sort by kx
+var ascendX = (a,b)=>{ return a.x - b.x }; // 小到大
+arr.sort(ascendX);
+var row = [];
+arr.map(x=>{row.push(x.line)});
+ew.row = row;
+
+ return ew;
+	};
+// 0,y
+var arr = [];
+var r = drawEWR(x0,y0);
+arr.push({'y':y0,'r':r.row});
+
+// ns includes ew
+var ns = {'n':{},'s':{}};
+// north
+for(var y=1;y<=bny;y++){
+var kx = x0, ky = y0+y;
+ var r = drawEWR(kx,ky);
+ ns.n = r;
+ arr.push({'y':ky,'r':r.row});
+}
+// south
+for(var y=1;y<=bsy;y++){
+ var kx = x0, ky = y0-y;
+ var r = drawEWR(kx,ky);
+ ns.s = r;
+ arr.push({'y':ky,'r':r.row});
+}
+
+// sort cols
+var decendY = (a,b)=>{ return b.y - a.y };
+arr.sort(decendY);
+var cols = [];
+arr.map(x=>{cols.push(x.r)});
+
+//cols to lines
+var lines = [];
+cols.map(x=>{
+	x.map(y=>{
+		lines.push(y);
+	});
+});
+
+// draw box 
+var wn = ns.n.w.getNEWS().wn;
+var ws = ns.s.w.getNEWS().ws;
+var en = ns.n.e.getNEWS().en;
+var es = ns.s.e.getNEWS().es;
+
+if(_isOD) en = getLLDB(en.lat,en.lng,d/2,0);
+if(_isOD) es = getLLDB(es.lat,es.lng,d/2,0);
+var news = {
+	'ws':[ws.lat,ws.lng],
+	'wn':[wn.lat,wn.lng],
+	'en':[en.lat,en.lng],
+	'es':[es.lat,es.lng]
+	};
+
+var boxEN = [news.ws,news.wn,news.en,news.es,news.ws];
+var box = {'name':x0+','+y0,'latlngs':[]};
+boxEN.map(x=>{
+var llr = getLLR(x,5);
+var latlng = getLatlng(llr[0],llr[1]);
+box.latlngs.push(latlng);
+});
+
+// info
+gridInfo(x0,y0,'cc');
+// draw box
+drawLine(box.latlngs,c.map,c.features.polylines);
+
+console.timeLog(1,'5: grid');
+
+// grid kml
+grid_KML(box,lines);
+console.timeEnd(1);
+
+return {'boxs':[box],'lines':lines,'cols':cols};
+};
+
 c.load_PJ = (x)=>{
 
  // process xml
@@ -928,12 +1550,11 @@ var load = {};
 	var coor = polygon.getElementsByTagName('coordinates')[0];
 	var arr = coor.textContent.split(' ');
 	var m0 = arr[0].split(','), m2 = arr[2].split(',');
-	var lat = m0[1]*1+(m2[1]*1-m0[1]*1)/2, lng = m0[0]*1+(m2[0]*1-m0[0]*1)/2;
-	var e = {'latLng': getLatlng(lat,lng) };
-	//var e = {'latLng': getLatlng(m2[1],m2[0]) };
-
+	var clat = m0[1]*1+(m2[1]*1-m0[1]*1)/2, clng = m0[0]*1+(m2[0]*1-m0[0]*1)/2;
+	var e = {'latLng': getLatlng(clat,clng) };
+	
 	if(x==1){
-		load = c.grid_PJ_latlng(e);
+		load = c.grid_LLDB(e);
 	}else{
 		load = c.grid_PJ(e);
 	}
@@ -950,7 +1571,7 @@ _markersMap = {};
 for(var i in markers){
 	var marker = markers[i];
 	var line = lines[i];
-	var key = marker.getPosition().lat()+'-'+marker.getPosition().lng();
+	var key = marker2key(marker);
 	_markersMap[key]={'marker':marker,'terr':'','line':line.latlngs};
 	marker.setTitle('');
 }
@@ -970,16 +1591,20 @@ p_cols_ms_html(load.cols,markers);
 _kml['load']=load;
 
 // add File
-var id = x==1 ? 'PJ_latlng' : 'PJ';
-var ws =boxs[0].name, ll=boxs[0].latlngs[0];
-var wsll = ll.lat()+','+ll.lng();
-addFile({'id':id,'ws':ws,'wsll':wsll,'cols':load.cols});
+var id = x==1 ? 'LLDB' : 'PJ';
+var bn =boxs[0].name;
+var bcll = clat+','+clng;
+addFile({'id':id,'bn':bn,'bcll':bcll,'cols':load.cols});
 
 };
 
 c.click_grid = (e)=>{
 
-if(_isPJ){ c.grid_PJ(e);return false;}
+if(_gridType != 'go_latlng'){
+	var exec = c.gridOptionMan(_gridType);
+	exec['click'](e);
+	return false;
+}
 
       var lat = e.latLng.lat() ; 
       var lng = e.latLng.lng() ;
@@ -1096,8 +1721,13 @@ return {'boxs':boxs,'lines':lines,'cols':cols}
 
 c.data_sort = ()=>{
 
-if(_isPJ){c.load_PJ();return false;}
-  // process xml
+if(_gridType != 'go_latlng'){
+	var exec = c.gridOptionMan(_gridType);
+	exec['load']();
+	return false;
+}	
+
+// process xml
 var xmlDoc = getXmlDoc('kml_out');
 
 var gos=[], groundOverlays = xmlDoc.getElementsByTagName('GroundOverlay');
@@ -1178,7 +1808,7 @@ _markersMap = {};
 for(var i in markers){
 	var marker = markers[i];
 	var line = lines[i];
-	var key = marker.getPosition().lat()+'-'+marker.getPosition().lng();
+	var key = marker2key(marker);
 	_markersMap[key]={'marker':marker,'terr':'','line':line.latlngs};
 	marker.setTitle('');
 }
@@ -1235,9 +1865,10 @@ _kml['load']=load;
 
 // add file
 var ws = boxs[0].name;
-var ws =boxs[0].name, ll=boxs[0].latlngs[0];
-var wsll = ll.lat()+','+ll.lng();
-addFile({'id':'latlng','ws':ws,'wsll':wsll,'cols': rows});
+var bn =boxs[0].name, m0=boxs[0].latlngs[0], m2=boxs[0].latlngs[2];
+var clat = m0.lat()+(m2.lat()-m0.lat())/2, clng = m0.lng()+(m2.lng()-m0.lng())/2;
+var bcll = clat+','+clng;
+addFile({'id':'latlng','bn':bn,'bcll':bcll,'cols': rows});
 
  };
 
@@ -1345,11 +1976,32 @@ function startMap() {
 					<div class="css_td">
 						<div style="position: absolute;">
 							<span>
-								<h1>info</h1>
-								<div id="info"></div>
+								<h1 class="para">info</h1>
+								<div id="info">
+								</div>
+								<div id="gridOptions">
+									<div class="gridOption" id="go_PJ" >
+										<input type="button" id="PJLv" value="10 km"/>
+									</div>
+									<div class="gridOption active" id="go_LLDB" >
+										<span>center:<input value="" /></span>
+										<span><input type="button" id="rcLLDB" value="edit"/></span>
+										<div>
+											<span>N<input value=""></span>
+											<span>E<input value=""></span>
+										</div>
+										<div>
+											<span>W<input value=""></span>
+											<span>S<input value=""></span>
+										</div>										
+									</div>
+									<div class="gridOption" id="go_latlng" >
+										<input type="button" id="llLv" value="1 deg"/>
+									</div>
+								</div>
 							</span>
 							<span style="display:none">
-								<h1>kml unit</h1>
+								<h1 class="para">kml unit</h1>
 								<textarea id="kml_in">
 									<?xml version="1.0" encoding="UTF-8"?>
 									<kml xmlns="http://www.opengis.net/kml/2.2" xmlns:gx="http://www.google.com/kml/ext/2.2" xmlns:kml="http://www.opengis.net/kml/2.2" xmlns:atom="http://www.w3.org/2005/Atom">
@@ -1467,19 +2119,24 @@ function startMap() {
 								</textarea>
 							</span>
 							<span>
-								<h1>kml grid
+								<h1 class="para">kml grid
+									<select id="gridOptSel">
+										<option value="go_LLDB">LLDB</option>	
+										<option value="go_PJ">PJ</option>
+										<option value="go_latlng">latlng</option>
+									</select>
 									<input type="button" id="isOD" class="active" value="OD"/>
 									<input type="button" id="grid_level" value="10 km"/>
-									<input type="button" id="isPJ" value="isPJ"/>
-									<input type="button" id="grid_PJ_latlng" value="latlng-PJ"/>
+									<input type="button" id="isPJ" value="isPJ" style="display:none"/>
+									<input type="button" id="grid_PJ_latlng" value="latlng-PJ" style="display:none"/>
 									</h1>	
 								<textarea id="kml_out"></textarea>
 								<button id="kml_copy">copy</button>
 								<button id="data_sort" >load</button>
-							<button id="load_PJ_latlng" >load latlng-PJ</button>
+							<button id="load_PJ_latlng" style="display:none">load latlng-PJ</button>
 							</span>
 							<span>
-								<h1>feature
+								<h1 class="para">feature
 									<button id="kml_write">write</button>
 									<button id="fileToggle" />file</button>
 									<a class="fileBoxA">
@@ -1487,7 +2144,7 @@ function startMap() {
 										<div class="file zero">
 												<input type="button" value="Load" />
 												<input type="text" class="head" value="latlng,121.0,24.5" />
-												<input type="text" class="wsll" value="0,0" style="display:none"/>		
+												<input type="text" class="bcll" value="0,0" style="display:none"/>		
 												<input type="text" class="grid" value="0,0,0,0,#" />
 												<input type="button" value="Del" />
 										</div>
@@ -1556,15 +2213,17 @@ function startMap() {
 	var gridLevelChange = latlng_map_tile.gridLevelChange;
 	document.getElementById('grid_level').addEventListener('click',gridLevelChange);
 
+	// deprecated
 	document.getElementById('grid_PJ_latlng').addEventListener('click',latlng_map_tile.grid_PJ_latlng);
-
 	document.getElementById('load_PJ_latlng').addEventListener('click',()=>{
 		latlng_map_tile.load_PJ(1);
 	});
 
+	// deprecated
 	document.getElementById('isPJ').addEventListener('click',latlng_map_tile.isPJ);
 
-document.getElementById('isOD').addEventListener('click',latlng_map_tile.isOD);
+	// Odd or Even
+	document.getElementById('isOD').addEventListener('click',latlng_map_tile.isOD);
 
 	// file
 	document.getElementById('fileToggle').addEventListener('click',(e)=>{
@@ -1573,6 +2232,16 @@ document.getElementById('isOD').addEventListener('click',latlng_map_tile.isOD);
 		x.style.display = x.style.display === "none" ? "block" : "none";
  	});
 
+	// gridOptionSelect
+	document.getElementById('gridOptSel').addEventListener('change',(e)=>{
+		var id = e.target.value;
+		// var ops = e.target.children;
+		document.querySelectorAll('.gridOption').forEach(x=>x.classList.remove('active'));
+		document.getElementById(id).classList.add('active');
+		latlng_map_tile.gridOptionMan(id,'change');
+	});
+
+	latlng_map_tile.gridOptionMan('go_LLDB').init();
 
 })();
 
